@@ -6,7 +6,7 @@ namespace Bank
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            Console.WriteLine("Bank Process");
         }
     }
 }

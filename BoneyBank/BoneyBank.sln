@@ -5,6 +5,10 @@ VisualStudioVersion = 17.3.32901.215
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bank", "Bank\Bank.csproj", "{27E54BAE-8E74-40E7-BA20-6CBAA5123EF2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BankClient", "BankClient\BankClient.csproj", "{73164FDF-2189-4BB3-B6DF-5143F417BBCF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Boney", "Boney\Boney.csproj", "{1D41A18C-ECA2-4132-BDF1-8076D398FC1C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{27E54BAE-8E74-40E7-BA20-6CBAA5123EF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{27E54BAE-8E74-40E7-BA20-6CBAA5123EF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{27E54BAE-8E74-40E7-BA20-6CBAA5123EF2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{73164FDF-2189-4BB3-B6DF-5143F417BBCF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73164FDF-2189-4BB3-B6DF-5143F417BBCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73164FDF-2189-4BB3-B6DF-5143F417BBCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73164FDF-2189-4BB3-B6DF-5143F417BBCF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D41A18C-ECA2-4132-BDF1-8076D398FC1C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D41A18C-ECA2-4132-BDF1-8076D398FC1C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D41A18C-ECA2-4132-BDF1-8076D398FC1C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D41A18C-ECA2-4132-BDF1-8076D398FC1C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

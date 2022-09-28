@@ -1,36 +1,64 @@
-﻿using Grpc.Core;
+﻿using BankServer;
+using Grpc.Core;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace BankServer
 {
-    // ChatServerService is the namespace defined in the protobuf
-    // ChatServerServiceBase is the generated base implementation of the service
-    public class ServerService : ChatServerService.ChatServerServiceBase
+    public class ServerService : BankServerService.BankServerServiceBase
     {
-        private Dictionary<string, string> clientMap = new Dictionary<string, string>();
-
+        private int balance;
         public ServerService()
         {
+            this.balance = 0;
         }
 
-        public override Task<ChatClientRegisterReply> Register(
-            ChatClientRegisterRequest request, ServerCallContext context)
+        public override Task<WithdrawReply> Withdraw(
+            WithdrawRequest request, ServerCallContext context)
         {
-            return Task.FromResult(Reg(request));
+            return Task.FromResult(WithdrawMoney(request));
         }
 
-        public ChatClientRegisterReply Reg(ChatClientRegisterRequest request)
+        public WithdrawReply WithdrawMoney(WithdrawRequest request)
         {
-            lock (this)
+            Console.WriteLine($"Withdraw: {request.Value}");
+            this.balance -= request.Value;
+            return new WithdrawReply
             {
-                clientMap.Add(request.Nick, request.Url);
-            }
-            Console.WriteLine($"Registered client {request.Nick} with URL {request.Url}");
-            return new ChatClientRegisterReply
+                Value = request.Value,
+                Balance = this.balance
+            };
+        }
+
+        public override Task<DepositReply> Deposit(
+            DepositRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(DpMoney(request));
+        }
+
+        public DepositReply DpMoney(DepositRequest request)
+        {
+            Console.WriteLine($"Deposit: {request.Value}");
+            this.balance += request.Value;
+            return new DepositReply
             {
-                Ok = true
+                Balance = this.balance
+            };
+        }
+
+        public override Task<ReadReply> Read(
+            ReadRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(RdBalance(request));
+        }
+
+        public ReadReply RdBalance(ReadRequest request)
+        {
+            Console.WriteLine($"Read: {this.balance}");
+            return new ReadReply
+            {
+                Balance = this.balance
             };
         }
     }
@@ -41,7 +69,7 @@ namespace BankServer
         {
             Server server = new Server
             {
-                Services = { ChatServerService.BindService(new ServerService()) },
+                Services = { BankServerService.BindService(new ServerService()) },
                 Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
             };
             server.Start();

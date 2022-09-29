@@ -2,7 +2,9 @@
 using Grpc.Core;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace BankServer
 {
@@ -67,6 +69,15 @@ namespace BankServer
         const int Port = 1001;
         static void Main(string[] args)
         {
+
+            ProcessStartInfo p_info = new ProcessStartInfo();
+            p_info.UseShellExecute = true;
+            p_info.CreateNoWindow = false;
+            p_info.WindowStyle = ProcessWindowStyle.Normal;
+            p_info.FileName = System.Environment.CurrentDirectory + "\\BoneyBank\\BankClient\\bin\\Debug\\netcoreapp3.1\\BankClient.exe";
+            p_info.Arguments = "P 1 client";
+            Process.Start(p_info);
+
             Server server = new Server
             {
                 Services = { BankServerService.BindService(new ServerService()) },

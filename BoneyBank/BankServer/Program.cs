@@ -3,6 +3,7 @@ using Grpc.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -67,6 +68,11 @@ namespace BankServer
     class Program
     {
         const int Port = 1001;
+
+        static string GetSolutionDir()
+        {
+            return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
+        }
         static void Main(string[] args)
         {
 
@@ -74,7 +80,11 @@ namespace BankServer
             p_info.UseShellExecute = true;
             p_info.CreateNoWindow = false;
             p_info.WindowStyle = ProcessWindowStyle.Normal;
-            p_info.FileName = System.Environment.CurrentDirectory + "\\BoneyBank\\BankClient\\bin\\Debug\\netcoreapp3.1\\BankClient.exe";
+
+            string baseDirectory = GetSolutionDir();
+            string clientPath = Path.Combine(baseDirectory, "BankClient", "bin", "Debug", "netcoreapp3.1", "BankClient.exe");
+
+            p_info.FileName = clientPath;
             p_info.Arguments = "P 1 client";
             Process.Start(p_info);
 

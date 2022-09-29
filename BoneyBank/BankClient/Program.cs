@@ -21,25 +21,11 @@ namespace BankClient
             // verification for configuration file (probably not needed)
             
             // this must come from a configuration file
-            int processId = -1;
-            const string serverHost = "localhost:1001";
+            int processId = int.Parse(args[0]);
+            // para quem é que envia mensagens ? 
+            const string serverHost = "localhost:10000";
+            Console.WriteLine(args);
 
-            if (args.Length != 3)
-            {
-                Console.WriteLine("Wrong number of arguments.");
-            }
-            else if (!args[0].Equals("P"))
-            {
-                Console.WriteLine("idk.");
-            }
-            else if (int.TryParse(args[1], out processId) && processId > 0)
-            {
-                Console.WriteLine("Process id must be a valid positive integer.");
-            }
-            else if (args[2].Equals("client"))
-            {
-                Console.WriteLine("Can only be started as 'client'.");
-            }
 
             GrpcChannel channel = GrpcChannel.ForAddress("http://" + serverHost);
             BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);

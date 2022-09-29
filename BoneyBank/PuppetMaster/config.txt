@@ -1,0 +1,14 @@
+P 1 boney http://localhost:10000
+P 2 boney http://localhost:10002
+P 3 boney http://localhost:10003
+P 4 bank http://localhost:10004
+P 5 bank http://localhost:10008
+P 6 bank http://localhost:10009
+P 7 client
+P 8 client
+S 3
+T 12:10:15
+D 50 
+F 1 (1, N, NS) (2, F, S) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS)
+F 2 (1, N, NS) (2, F, S) (3, N, NS) (4, F, NS) (5, N, NS) (6, N, NS)
+F 3 (1, N, NS) (2, N, S) (3, N, NS) (4, F, S) (5, N, NS) (6, N, NS)

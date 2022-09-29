@@ -67,34 +67,15 @@ namespace BankServer
     }
     class Program
     {
-        const int Port = 1001;
-
-        static string GetSolutionDir()
-        {
-            return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
-        }
         static void Main(string[] args)
         {
-
-            ProcessStartInfo p_info = new ProcessStartInfo();
-            p_info.UseShellExecute = true;
-            p_info.CreateNoWindow = false;
-            p_info.WindowStyle = ProcessWindowStyle.Normal;
-
-            string baseDirectory = GetSolutionDir();
-            string clientPath = Path.Combine(baseDirectory, "BankClient", "bin", "Debug", "netcoreapp3.1", "BankClient.exe");
-
-            p_info.FileName = clientPath;
-            p_info.Arguments = "P 1 client";
-            Process.Start(p_info);
-
             Server server = new Server
             {
                 Services = { BankServerService.BindService(new ServerService()) },
-                Ports = { new ServerPort("localhost", Port, ServerCredentials.Insecure) }
+                Ports = { new ServerPort(args[1], int.Parse(args[2]), ServerCredentials.Insecure) }
             };
             server.Start();
-            Console.WriteLine("ChatServer server listening on port " + Port);
+            Console.WriteLine("ChatServer server listening on port " + args[2]);
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();
 

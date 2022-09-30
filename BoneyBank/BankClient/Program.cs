@@ -1,36 +1,48 @@
 ﻿using Grpc.Net.Client;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 
 namespace BankClient
 {
     internal class Program
     {
+        static string GetSolutionDir()
+        {
+            // Leads to /BoneyBank
+            return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
+        }
+
         static void Main(string[] args)
         {
-
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
-            /*
-             * Configuration for client should follow:
-             *  P <id> client
-             * e.g.
-             *  P 1 client 
-             */
-
-            // verification for configuration file (probably not needed)
+            Console.WriteLine(args);
             
             // this must come from a configuration file
             int processId = int.Parse(args[0]);
-            // para quem é que envia mensagens ? 
-            const string serverHost = "localhost:10000";
-            Console.WriteLine(args);
 
+            // Read config.txt
+            string baseDirectory = GetSolutionDir();
+            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
 
-            GrpcChannel channel = GrpcChannel.ForAddress("http://" + serverHost);
-            BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);
+            string[] lines = File.ReadAllLines(configFilePath);
+            Dictionary <string, BankServerService.BankServerServiceClient> bankHosts = new Dictionary <string,BankServerService.BankServerServiceClient>();
 
-            Console.WriteLine("Starting Bank Client on " + serverHost + "with process id " + processId);
+            foreach (string line in lines)
+            {
+                string[] configArgs = line.Split(" ");
+
+                if (configArgs[0].Equals("P") && configArgs[2].Equals("bank"))
+                {
+                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
+                    BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);
+                    bankHosts.Add(configArgs[1], client);
+                }
+            }
+
+            Console.WriteLine("Starting Bank Client with" + processId);
 
             while (true) {
 
@@ -49,9 +61,16 @@ namespace BankClient
                         }
 
                         DepositRequest depositRequest = new DepositRequest { Value = int.Parse(commandArgs[1]) };
-                        DepositReply depositReply = client.Deposit(depositRequest);
-                        Console.WriteLine("reply: ");
-                        Console.WriteLine("\tBalance: " + depositReply.Balance);
+                        
+                        foreach (var entry in bankHosts)
+                        {
+                            DepositReply depositReply = entry.Value.Deposit(depositRequest);
+                            Console.WriteLine("reply: ");
+                            Console.WriteLine("\tBalance: " + depositReply.Balance);
+                        }
+
+                        // IS THIS PARALLEL ?
+                        
                         break;
 
                     case "W":
@@ -62,10 +81,14 @@ namespace BankClient
                         }
 
                         WithdrawRequest withdrawRequest = new WithdrawRequest { Value = int.Parse(commandArgs[1]) };
-                        WithdrawReply withdrawReply = client.Withdraw(withdrawRequest);
-                        Console.WriteLine("reply: ");
-                        Console.WriteLine("\tValue " + withdrawReply.Value);
-                        Console.WriteLine("\tBalance: " + withdrawReply.Balance);
+
+                        foreach (var entry in bankHosts)
+                        {
+                            WithdrawReply withdrawReply = entry.Value.Withdraw(withdrawRequest);
+                            Console.WriteLine("reply: ");
+                            Console.WriteLine("\tBalance: " + withdrawReply.Balance);
+                        }
+
                         break;
 
                     case "R":
@@ -76,9 +99,14 @@ namespace BankClient
                         }
 
                         ReadRequest readRequest = new ReadRequest { };
-                        ReadReply readReply = client.Read(readRequest);
-                        Console.WriteLine("reply: ");
-                        Console.WriteLine("\tBalance: " + readReply.Balance);
+
+                        foreach (var entry in bankHosts)
+                        {
+                            ReadReply readReply = entry.Value.Read(readRequest);
+                            Console.WriteLine("reply: ");
+                            Console.WriteLine("\tBalance: " + readReply.Balance);
+                        }
+
                         break;
 
                     default:

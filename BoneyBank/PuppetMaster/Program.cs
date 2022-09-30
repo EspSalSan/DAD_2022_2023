@@ -25,7 +25,7 @@ namespace PuppetMaster
 
         static void CreateProcess(string[] configArgs)
         {
-            // Not MacOS friendly ;-)
+            // Not MacOS friendly because it compiles to .dll and not .exe
             string baseDirectory = GetSolutionDir();
             string clientPath = Path.Combine(baseDirectory, "BankClient", "bin", "Debug", "netcoreapp3.1", "BankClient.exe");
             string serverPath = Path.Combine(baseDirectory, "BankServer", "bin", "Debug", "netcoreapp3.1", "BankServer.exe");
@@ -57,60 +57,29 @@ namespace PuppetMaster
             }
             else
             {
-                Console.WriteLine("Incorrect config file");
+                Console.WriteLine("Incorrect config file.");
                 return;
             }
         }
 
         static void Main(string[] args)
         {
-            /*
-             * Arguments
-             * Clients: <id>        [<bankURL>,...]
-             * Banks:   <id> <URL>  [<boneyURL>,...]    [[<id>, <N/F>, <S/NS>],...]
-             * Boney:   <id> <URL>                      [[<id>, <N/F>, <S/NS>],...]
-             * 
-             * OU
-             * 
-             * Deixar como está e cada processo lê o ficheiro para obter os URLS dos outros
-             * e os estados em cada slot
-             */
-
             string baseDirectory = GetSolutionDir();
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
 
             if (!File.Exists(configFilePath))
             {
-                Console.WriteLine("Config file not found");
+                Console.WriteLine("Config file not found.");
                 return;
             }
 
-            string[] lines = File.ReadAllLines(configFilePath);
-            foreach(string line in lines)
+            foreach(string line in File.ReadAllLines(configFilePath))
             {
                 string[] configArgs = line.Split(" ");
 
-                switch (configArgs[0])
+                if (configArgs[0].Equals("P"))
                 {
-                    case "P":
-                        CreateProcess(configArgs);
-                        break;
-
-                    case "S":
-                        break;
-
-                    case "T":
-                        break;
-
-                    case "D":
-                        break;
-
-                    case "F":
-                        break;
-
-                    default:
-                        break;
-
+                    CreateProcess(configArgs);
                 }
             }    
         }

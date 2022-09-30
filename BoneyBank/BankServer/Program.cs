@@ -37,10 +37,10 @@ namespace BankServer
         public override Task<DepositReply> Deposit(
             DepositRequest request, ServerCallContext context)
         {
-            return Task.FromResult(DpMoney(request));
+            return Task.FromResult(DepositMoney(request));
         }
 
-        public DepositReply DpMoney(DepositRequest request)
+        public DepositReply DepositMoney(DepositRequest request)
         {
             Console.WriteLine($"Deposit: {request.Value}");
             this.balance += request.Value;
@@ -53,10 +53,10 @@ namespace BankServer
         public override Task<ReadReply> Read(
             ReadRequest request, ServerCallContext context)
         {
-            return Task.FromResult(RdBalance(request));
+            return Task.FromResult(ReaddBalance(request));
         }
 
-        public ReadReply RdBalance(ReadRequest request)
+        public ReadReply ReaddBalance(ReadRequest request)
         {
             Console.WriteLine($"Read: {this.balance}");
             return new ReadReply
@@ -74,7 +74,9 @@ namespace BankServer
                 Services = { BankServerService.BindService(new ServerService()) },
                 Ports = { new ServerPort(args[1], int.Parse(args[2]), ServerCredentials.Insecure) }
             };
+
             server.Start();
+
             Console.WriteLine("ChatServer server listening on port " + args[2]);
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

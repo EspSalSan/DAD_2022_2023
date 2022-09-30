@@ -64,6 +64,17 @@ namespace PuppetMaster
 
         static void Main(string[] args)
         {
+            /*
+             * Arguments
+             * Clients: <id>        [<bankURL>,...]
+             * Banks:   <id> <URL>  [<boneyURL>,...]    [[<id>, <N/F>, <S/NS>],...]
+             * Boney:   <id> <URL>                      [[<id>, <N/F>, <S/NS>],...]
+             * 
+             * OU
+             * 
+             * Deixar como está e cada processo lê o ficheiro para obter os URLS dos outros
+             * e os estados em cada slot
+             */
 
             string baseDirectory = GetSolutionDir();
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");

@@ -18,47 +18,47 @@ namespace BankServer
 
         // USE LOCKS !!
 
-        public override Task<WithdrawReply> Withdraw(
-            WithdrawRequest request, ServerCallContext context)
+        public override Task<WithdrawReply> Withdraw(WithdrawRequest request, ServerCallContext context)
         {
             return Task.FromResult(WithdrawMoney(request));
         }
 
         public WithdrawReply WithdrawMoney(WithdrawRequest request)
         {
-            Console.WriteLine($"Withdraw: {request.Value}");
-            this.balance -= request.Value;
-            return new WithdrawReply
+            lock (this)
             {
-                Value = request.Value,
-                Balance = this.balance
-            };
+                Console.WriteLine($"Withdraw: {request.Value}");
+
+                this.balance -= request.Value;
+
+                return new WithdrawReply
+                {
+                    Value = request.Value,
+                    Balance = this.balance
+                };
+            } 
         }
 
-        public override Task<DepositReply> Deposit(
-            DepositRequest request, ServerCallContext context)
+        public override Task<DepositReply> Deposit(DepositRequest request, ServerCallContext context)
         {
-            if(this.processId == 5)
-            {
-                Console.ReadKey();
-            }
             return Task.FromResult(DepositMoney(request));
         }
 
         public DepositReply DepositMoney(DepositRequest request)
         {
-            Console.WriteLine($"Deposit: {request.Value}");
-            this.balance += request.Value;
-            return new DepositReply
+            lock (this)
             {
-                Balance = this.balance
-            };
+                Console.WriteLine($"Deposit: {request.Value}");
+                this.balance += request.Value;
+                return new DepositReply
+                {
+                    Balance = this.balance
+                };
+            }
         }
 
-        public override Task<ReadReply> Read(
-            ReadRequest request, ServerCallContext context)
+        public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
         {
-            
             return Task.FromResult(ReadBalance(request));
         }
 
@@ -86,9 +86,17 @@ namespace BankServer
 
             Console.WriteLine(args);
 
+            // Data from config file
             int processId = int.Parse(args[0]);
             string host = args[1];
             int port = int.Parse(args[2]);
+
+            // TODO
+            int numberOfSlots;
+            int startTime; // best type to store hh:mm:ss ?
+            int interval; 
+            // somehow store data about being frozen/not frozen
+
 
             // Read config.txt
             string baseDirectory = GetSolutionDir();

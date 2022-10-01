@@ -1,7 +1,6 @@
 ﻿using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 
 namespace BankClient
@@ -20,7 +19,6 @@ namespace BankClient
 
             Console.WriteLine(args);
             
-            // this must come from a configuration file
             int processId = int.Parse(args[0]);
 
             // Read config.txt
@@ -28,7 +26,7 @@ namespace BankClient
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
 
             string[] lines = File.ReadAllLines(configFilePath);
-            Dictionary <string, BankServerService.BankServerServiceClient> bankHosts = new Dictionary <string,BankServerService.BankServerServiceClient>();
+            Dictionary <string, BankClientService.BankClientServiceClient> bankHosts = new Dictionary <string,BankClientService.BankClientServiceClient>();
 
             foreach (string line in lines)
             {
@@ -37,7 +35,7 @@ namespace BankClient
                 if (configArgs[0].Equals("P") && configArgs[2].Equals("bank"))
                 {
                     GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);
+                    BankClientService.BankClientServiceClient client = new BankClientService.BankClientServiceClient(channel);
                     bankHosts.Add(configArgs[1], client);
                 }
             }
@@ -61,16 +59,24 @@ namespace BankClient
                         }
 
                         DepositRequest depositRequest = new DepositRequest { Value = int.Parse(commandArgs[1]) };
-                        
-                        foreach (var entry in bankHosts)
-                        {
-                            DepositReply depositReply = entry.Value.Deposit(depositRequest);
-                            Console.WriteLine("reply: ");
-                            Console.WriteLine("\tBalance: " + depositReply.Balance);
-                        }
+
 
                         // IS THIS PARALLEL ?
-                        
+                        foreach (var entry in bankHosts)
+                        {
+                            try
+                            {
+                                DepositReply depositReply = entry.Value.Deposit(depositRequest, deadline: DateTime.UtcNow.AddSeconds(2));
+                                Console.WriteLine("reply: ");
+                                Console.WriteLine("\tBalance: " + depositReply.Balance);
+                            }
+                            catch (Grpc.Core.RpcException e)
+                            {
+                                Console.WriteLine(e.Status);
+                            }
+                            
+                        }
+
                         break;
 
                     case "W":

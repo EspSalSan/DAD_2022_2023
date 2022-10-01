@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option csharp_namespace = "Boney";
+
+service PaxosService {
+  rpc Prepare(PrepareRequest) returns (PromiseReply);
+}
+
+message PrepareRequest {
+    int32 leaderId = 1;
+}
+message PromiseReply {
+    int32 readTimestamp = 1;
+    int32 value = 2;
+}

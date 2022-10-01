@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-option csharp_namespace = "BankClient";
+option csharp_namespace = "BankServer";
 
-service BankServerService {
-  rpc Deposit (DepositRequest) returns (DepositReply);
-  rpc Withdraw (WithdrawRequest) returns (WithdrawReply);
-  rpc Read (ReadRequest) returns (ReadReply);
+service BankClientService {
+  rpc Deposit (DepositRequest)		returns (DepositReply);
+  rpc Withdraw (WithdrawRequest)	returns (WithdrawReply);
+  rpc Read (ReadRequest)			returns (ReadReply);
 }
 
 message DepositRequest {

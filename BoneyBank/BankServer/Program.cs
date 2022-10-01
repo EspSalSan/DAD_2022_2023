@@ -1,21 +1,22 @@
-﻿using BankServer;
-using Grpc.Core;
+﻿using Grpc.Core;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace BankServer
 {
-    public class ServerService : BankServerService.BankServerServiceBase
+    public class ServerService : BankClientService.BankClientServiceBase
     {
+        private int processId;
         private int balance;
-        public ServerService()
+        public ServerService(int processId)
         {
             this.balance = 0;
+            this.processId = processId;
         }
+
+        // USE LOCKS !!
 
         public override Task<WithdrawReply> Withdraw(
             WithdrawRequest request, ServerCallContext context)
@@ -37,6 +38,10 @@ namespace BankServer
         public override Task<DepositReply> Deposit(
             DepositRequest request, ServerCallContext context)
         {
+            if(this.processId == 5)
+            {
+                Console.ReadKey();
+            }
             return Task.FromResult(DepositMoney(request));
         }
 
@@ -53,10 +58,11 @@ namespace BankServer
         public override Task<ReadReply> Read(
             ReadRequest request, ServerCallContext context)
         {
-            return Task.FromResult(ReaddBalance(request));
+            
+            return Task.FromResult(ReadBalance(request));
         }
 
-        public ReadReply ReaddBalance(ReadRequest request)
+        public ReadReply ReadBalance(ReadRequest request)
         {
             Console.WriteLine($"Read: {this.balance}");
             return new ReadReply
@@ -67,16 +73,55 @@ namespace BankServer
     }
     class Program
     {
+        static string GetSolutionDir()
+        {
+            // Leads to /BoneyBank
+            return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
+        }
+
         static void Main(string[] args)
         {
+            // wtf does this do
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+            Console.WriteLine(args);
+
+            int processId = int.Parse(args[0]);
+            string host = args[1];
+            int port = int.Parse(args[2]);
+
+            // Read config.txt
+            string baseDirectory = GetSolutionDir();
+            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
+            
+            string[] lines = File.ReadAllLines(configFilePath);
+            Dictionary <string, string> boneyHosts = new Dictionary <string, string>();
+
+            foreach (string line in lines)
+            {
+                string[] configArgs = line.Split(" ");
+
+                if (configArgs[0].Equals("P") && configArgs[2].Equals("boney"))
+                {
+                    // todo
+                    //GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
+                    //BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);
+                    boneyHosts.Add(configArgs[1], configArgs[3]);
+                }
+            }
+
             Server server = new Server
             {
-                Services = { BankServerService.BindService(new ServerService()) },
-                Ports = { new ServerPort(args[1], int.Parse(args[2]), ServerCredentials.Insecure) }
+                Services = { BankClientService.BindService(new ServerService(processId)) },
+                Ports = { new ServerPort(host, port, ServerCredentials.Insecure) }
             };
 
             server.Start();
 
+            
+
+
+            Console.WriteLine("process id:" + processId);
             Console.WriteLine("ChatServer server listening on port " + args[2]);
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

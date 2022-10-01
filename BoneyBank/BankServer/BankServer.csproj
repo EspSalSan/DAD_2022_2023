@@ -6,13 +6,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Protos\BankServer_BankServer.proto" />
+    <None Remove="Protos\BankServer_Boney.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.21.6" />
     <PackageReference Include="Grpc.Core" Version="2.46.5" />
     <PackageReference Include="Grpc.Tools" Version="2.49.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-	<Protobuf Include="Protos\BankServices.proto" GrpcServices="Server" />
+    <Protobuf Include="Protos\BankServer_BankServer.proto" GrpcServices="Server" />
+    <Protobuf Include="Protos\BankServer_Boney.proto" GrpcServices="Server" />
+	<Protobuf Include="Protos\BankClient_BankServer.proto" GrpcServices="Server" />
   </ItemGroup>
 
 </Project>

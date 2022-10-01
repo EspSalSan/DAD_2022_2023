@@ -2,9 +2,19 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Boney
 {
+    public class BoneyPaxosService : PaxosService.PaxosServiceBase
+    {
+        private int processId;
+        public BoneyPaxosService(int processId)
+        {
+            this.processId = processId;
+        }
+    }
+
     internal class Program
     {
         static string GetSolutionDir()
@@ -42,7 +52,7 @@ namespace Boney
 
             Server server = new Server
             {
-                Services = { BoneyService.BindService(new ServerService(processId)) },
+                Services = { PaxosService.BindService(new BoneyPaxosService(processId)) },
                 Ports = { new ServerPort(host, port, ServerCredentials.Insecure) }
             };
 

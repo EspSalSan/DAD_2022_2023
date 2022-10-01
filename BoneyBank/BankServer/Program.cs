@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace BankServer
 {
-    public class ServerService : BankClientService.BankClientServiceBase
+    public class ServerService : BankService.BankServiceBase
     {
         private int processId;
         private int balance;
@@ -112,14 +112,11 @@ namespace BankServer
 
             Server server = new Server
             {
-                Services = { BankClientService.BindService(new ServerService(processId)) },
+                Services = { BankService.BindService(new ServerService(processId)) },
                 Ports = { new ServerPort(host, port, ServerCredentials.Insecure) }
             };
 
             server.Start();
-
-            
-
 
             Console.WriteLine("process id:" + processId);
             Console.WriteLine("ChatServer server listening on port " + args[2]);

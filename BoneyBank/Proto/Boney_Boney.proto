@@ -4,6 +4,7 @@ option csharp_namespace = "Boney";
 
 service PaxosService {
   rpc Prepare(PrepareRequest) returns (PromiseReply);
+  rpc Accept(AcceptRequest) returns (AcceptReply);
 }
 
 message PrepareRequest {
@@ -12,4 +13,13 @@ message PrepareRequest {
 message PromiseReply {
     int32 readTimestamp = 1;
     int32 value = 2;
+}
+
+message AcceptRequest {
+  int32 leaderId = 1;
+  int32 value = 2;
+}
+message AcceptReply {
+  int32 writeTimestamp = 1;
+  int32 value = 2;
 }

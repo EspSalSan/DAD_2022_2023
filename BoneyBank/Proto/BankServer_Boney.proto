@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-option csharp_namespace = "BankServer";
+option csharp_namespace = "Boney";
 
-service BoneyClientService {
+service CompareAndSwapService {
   rpc CompareAndSwap(CompareAndSwapRequest) returns (CompareAndSwapReply);
 }
 
@@ -10,6 +10,7 @@ message CompareAndSwapRequest {
 	int32 slot = 1;
 	int32 invalue = 2;
 }
+
 message CompareAndSwapReply {
 	int32 outvalue = 1;
 }

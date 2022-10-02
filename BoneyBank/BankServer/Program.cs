@@ -1,77 +1,14 @@
 ﻿using Grpc.Core;
+using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace BankServer
 {
-    public class ServerService : BankService.BankServiceBase
-    {
-        private int processId;
-        private int balance;
-        public ServerService(int processId)
-        {
-            this.balance = 0;
-            this.processId = processId;
-        }
-
-        // USE LOCKS !!
-
-        public override Task<WithdrawReply> Withdraw(WithdrawRequest request, ServerCallContext context)
-        {
-            return Task.FromResult(WithdrawMoney(request));
-        }
-
-        public WithdrawReply WithdrawMoney(WithdrawRequest request)
-        {
-            lock (this)
-            {
-                Console.WriteLine($"Withdraw: {request.Value}");
-
-                this.balance -= request.Value;
-
-                return new WithdrawReply
-                {
-                    Value = request.Value,
-                    Balance = this.balance
-                };
-            } 
-        }
-
-        public override Task<DepositReply> Deposit(DepositRequest request, ServerCallContext context)
-        {
-            return Task.FromResult(DepositMoney(request));
-        }
-
-        public DepositReply DepositMoney(DepositRequest request)
-        {
-            lock (this)
-            {
-                Console.WriteLine($"Deposit: {request.Value}");
-                this.balance += request.Value;
-                return new DepositReply
-                {
-                    Balance = this.balance
-                };
-            }
-        }
-
-        public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
-        {
-            return Task.FromResult(ReadBalance(request));
-        }
-
-        public ReadReply ReadBalance(ReadRequest request)
-        {
-            Console.WriteLine($"Read: {this.balance}");
-            return new ReadReply
-            {
-                Balance = this.balance
-            };
-        }
-    }
-    class Program
+    internal class Program
     {
         static string GetSolutionDir()
         {
@@ -79,31 +16,28 @@ namespace BankServer
             return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
         }
 
-        static void Main(string[] args)
+        static Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> GetBankHost(string[] lines)
         {
-            // wtf does this do
-            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+            // Search config for bank URLs
+            var bankHosts = new Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient>();
 
-            Console.WriteLine(args);
+            foreach (string line in lines)
+            {
+                string[] configArgs = line.Split(" ");
 
-            // Data from config file
-            int processId = int.Parse(args[0]);
-            string host = args[1];
-            int port = int.Parse(args[2]);
+                if (configArgs[0].Equals("P") && configArgs[2].Equals("bank"))
+                {
+                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
+                    bankHosts.Add(configArgs[1], new TwoPhaseCommit.TwoPhaseCommitClient(channel));
+                }
+            }
+            return bankHosts;
+        }
 
-            // TODO
-            int numberOfSlots;
-            int startTime; // best type to store hh:mm:ss ?
-            int interval; 
-            // somehow store data about being frozen/not frozen
-
-
-            // Read config.txt
-            string baseDirectory = GetSolutionDir();
-            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
-            
-            string[] lines = File.ReadAllLines(configFilePath);
-            Dictionary <string, string> boneyHosts = new Dictionary <string, string>();
+        static Dictionary<string, CompareAndSwap.CompareAndSwapClient> GetBoneyHost(string[] lines)
+        {
+            // Search config for boney URLs
+            var bankHosts = new Dictionary<string, CompareAndSwap.CompareAndSwapClient>();
 
             foreach (string line in lines)
             {
@@ -111,28 +45,106 @@ namespace BankServer
 
                 if (configArgs[0].Equals("P") && configArgs[2].Equals("boney"))
                 {
-                    // todo
-                    //GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    //BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);
-                    boneyHosts.Add(configArgs[1], configArgs[3]);
+                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
+                    bankHosts.Add(configArgs[1], new CompareAndSwap.CompareAndSwapClient(channel));
                 }
             }
+            return bankHosts;
+        }
+
+        static List<Dictionary<int, string>> GetProcessesState(string[] lines)
+        {
+            // Search config for process state (suspected / not-suspected)
+            List<Dictionary<int, string>> processesStatePerSlot = new List<Dictionary<int, string>>();
+
+            // Regex to detect the triplet, e.g.: (1, N, NS)
+            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
+            Regex rg = new Regex(pattern);
+
+            foreach (string line in lines)
+            {
+                if (line[0].Equals('F'))
+                {
+                    var processesStateSlot = new Dictionary<int, string>();
+
+                    MatchCollection matched = rg.Matches(line);
+                    foreach (Match match in matched)
+                    {
+                        string[] values = match.Value.Split(", ");
+
+                        int processId = int.Parse(values[0].Remove(0, 1));
+                        string state = values[2].Remove(values[2].Length - 1);
+
+                        processesStateSlot.Add(processId, state);
+                    }
+
+                    // FUTURE USE PRINT DICTIONARY VERY USEFULL
+                    //processesStateSlot.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
+                    processesStatePerSlot.Add(processesStateSlot);
+                }
+            }
+            return processesStatePerSlot;
+        }
+
+        static (int slotDuration, TimeSpan startTime) GetSlotsDetails(string[] lines)
+        {
+            int slotDuration = -1;
+            TimeSpan startTime = new TimeSpan();
+
+            foreach (string line in lines)
+            {
+                if (line[0].Equals('T'))
+                {
+                    string[] configArgs = line.Split(" ");
+                    string[] time = configArgs[1].Split(":");
+                    startTime = new TimeSpan(int.Parse(time[0]), int.Parse(time[1]), int.Parse(time[2]));
+                }
+                if (line[0].Equals('D'))
+                {
+                    string[] configArgs = line.Split(" ");
+                    slotDuration = int.Parse(configArgs[1]);
+                }
+            }
+            return (slotDuration, startTime);
+        }
+
+        static void Main(string[] args)
+        {
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+            // Read config.txt
+            string baseDirectory = GetSolutionDir();
+            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
+            string[] lines = File.ReadAllLines(configFilePath);
+
+            // Initial data
+            int processId = int.Parse(args[0]);
+            string host = args[1];
+            int port = int.Parse(args[2]);
+            Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = GetBankHost(lines);
+            Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts = GetBoneyHost(lines);
+            List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
+            (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
+
+            // Provavelmente devia receber mais informacao
+            ServerService serverService = new ServerService(processId);
 
             Server server = new Server
             {
-                Services = { BankService.BindService(new ServerService(processId)) },
+                Services = { 
+                    Bank.BindService(new BankService(serverService)),
+                    TwoPhaseCommit.BindService(new TwoPhaseCommitService(serverService)),
+                },
                 Ports = { new ServerPort(host, port, ServerCredentials.Insecure) }
             };
 
             server.Start();
 
-            Console.WriteLine("process id:" + processId);
-            Console.WriteLine("ChatServer server listening on port " + args[2]);
+            Console.WriteLine("Bank Server (" + processId +  ") listening on port " + args[2]);
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();
 
             server.ShutdownAsync().Wait();
-
         }
     }
 }

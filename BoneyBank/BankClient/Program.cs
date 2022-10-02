@@ -1,9 +1,7 @@
-﻿using BankServer;
-using Grpc.Net.Client;
+﻿using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace BankClient
@@ -15,10 +13,10 @@ namespace BankClient
             // Leads to /BoneyBank
             return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
         }
-        static Dictionary<string, BankService.BankServiceClient> GetBankHost(string[] lines) 
+        static Dictionary<string, Bank.BankClient> GetBankHost(string[] lines) 
         {
             // Search config for bank URLs
-            Dictionary<string, BankService.BankServiceClient> bankHosts = new Dictionary <string,BankService.BankServiceClient>();
+            Dictionary<string, Bank.BankClient> bankHosts = new Dictionary <string,Bank.BankClient>();
 
             foreach (string line in lines)
             {
@@ -27,10 +25,9 @@ namespace BankClient
                 if (configArgs[0].Equals("P") && configArgs[2].Equals("bank"))
                 {
                     GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    bankHosts.Add(configArgs[1], new BankService.BankServiceClient(channel));
+                    bankHosts.Add(configArgs[1], new Bank.BankClient(channel));
                 }
             }
-
             return bankHosts;
         }
 
@@ -65,11 +62,32 @@ namespace BankClient
                     processesStatePerSlot.Add(processesStateSlot);
                 }
             }
-
             return processesStatePerSlot;
         }
 
-        static void SendDepositRequest(string[] commandArgs, Dictionary<string, BankService.BankServiceClient> bankHosts)
+        static (int slotDuration, TimeSpan startTime) GetSlotsDetails(string[] lines)
+        {
+            int slotDuration = -1;
+            TimeSpan startTime = new TimeSpan();
+
+            foreach (string line in lines)
+            {
+                if (line[0].Equals('T'))
+                {
+                    string[] configArgs = line.Split(" ");
+                    string[] time = configArgs[1].Split(":");
+                    startTime = new TimeSpan(int.Parse(time[0]), int.Parse(time[1]), int.Parse(time[2]));
+                }
+                if (line[0].Equals('D'))
+                {
+                    string[] configArgs = line.Split(" ");
+                    slotDuration = int.Parse(configArgs[1]);
+                }
+            }
+            return (slotDuration, startTime);
+        }
+
+        static void SendDepositRequest(string[] commandArgs, Dictionary<string, Bank.BankClient> bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 2)
@@ -97,7 +115,7 @@ namespace BankClient
             }
         }
 
-        static void SendWithdrawRequest(string[] commandArgs, Dictionary<string, BankService.BankServiceClient> bankHosts)
+        static void SendWithdrawRequest(string[] commandArgs, Dictionary<string, Bank.BankClient> bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 2)
@@ -123,7 +141,7 @@ namespace BankClient
             }
         }
 
-        static void SendReadBalanceRequest(string[] commandArgs, Dictionary<string, BankService.BankServiceClient> bankHosts)
+        static void SendReadBalanceRequest(string[] commandArgs, Dictionary<string, Bank.BankClient> bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 1)
@@ -161,9 +179,9 @@ namespace BankClient
 
             // Initial data
             int processId = int.Parse(args[0]);
-            Dictionary <string, BankService.BankServiceClient> bankHosts = GetBankHost(lines);
+            Dictionary <string, Bank.BankClient> bankHosts = GetBankHost(lines);
             List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
-            // Duvida: "Each process keeps a guess of who is the group leader" isto é em relacao ao lider dos bancos ou tbm do boney ?
+            (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
 
             Console.WriteLine("Bank Client with id: " + processId);
 

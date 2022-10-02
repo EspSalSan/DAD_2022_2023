@@ -2,14 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 
 namespace Boney
 {
-    public class BoneyPaxosService : PaxosService.PaxosServiceBase
+    public class BoneyPaxos : Paxos.PaxosBase
     {
         private int processId;
-        public BoneyPaxosService(int processId)
+        public BoneyPaxos(int processId)
         {
             this.processId = processId;
         }
@@ -52,7 +51,7 @@ namespace Boney
 
             Server server = new Server
             {
-                Services = { PaxosService.BindService(new BoneyPaxosService(processId)) },
+                Services = { Paxos.BindService(new BoneyPaxos(processId)) },
                 Ports = { new ServerPort(host, port, ServerCredentials.Insecure) }
             };
 

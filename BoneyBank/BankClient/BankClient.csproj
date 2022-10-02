@@ -12,7 +12,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-	<Protobuf Include="..\Proto\BankClient_BankServer.proto" GrpcServices="Client" Link="Protos\BankClient_BankServer.proto"/>
+	<Protobuf Include="..\Proto\BankClient_BankServer.proto" GrpcServices="Client" Link="Protos\BankClient_BankServer.proto" />
   </ItemGroup>
 
 </Project>

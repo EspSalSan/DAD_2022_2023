@@ -1,9 +1,26 @@
 syntax = "proto3";
 
-option csharp_namespace = "BankServer";
-
-service TwoPhaseCommitService {
-	// 2PC
+service TwoPhaseCommit {
+	rpc Tentative(TentativeRequest) returns (TentativeResponse);
+	rpc Commit(CommitRequest) returns (CommitResponse);
 }
+
+// rever o que é preciso enviar em cada mensagem
+message TentativeRequest {
+	int32 processId = 1;
+	int32 sequenceNumber = 2;
+}
+message TentativeResponse {
+	bool success = 1;
+}
+
+message CommitRequest {
+	int32 processId = 1;
+	int32 sequenceNumber = 2;
+}
+message CommitResponse {
+	bool success = 1;
+}
+
 
 

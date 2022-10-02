@@ -1,8 +1,6 @@
 syntax = "proto3";
 
-option csharp_namespace = "Boney";
-
-service PaxosService {
+service Paxos {
   rpc Prepare(PrepareRequest) returns (PromiseReply);
   rpc Accept(AcceptRequest) returns (AcceptReply);
 }

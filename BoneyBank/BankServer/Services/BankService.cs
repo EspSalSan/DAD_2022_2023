@@ -2,7 +2,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace BankServer
+namespace BankServer.Services
 {
     public class BankService : Bank.BankBase
     {
@@ -26,6 +26,6 @@ namespace BankServer
         public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
         {
             return Task.FromResult(serverService.ReadBalance(request));
-        }  
+        }
     }
 }

@@ -2,13 +2,13 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace BankServer
+namespace BankServer.Services
 {
     public class TwoPhaseCommitService : TwoPhaseCommit.TwoPhaseCommitBase
     {
         private ServerService serverService;
 
-        public TwoPhaseCommitService (ServerService serverService)
+        public TwoPhaseCommitService(ServerService serverService)
         {
             this.serverService = serverService;
         }

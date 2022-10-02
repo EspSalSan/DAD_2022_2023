@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace BankServer
+namespace BankServer.Services
 {
     public class ServerService
     {
@@ -10,7 +10,7 @@ namespace BankServer
         private int balance;
         public ServerService(int processId)
         {
-            this.balance = 0;
+            balance = 0;
             this.processId = processId;
         }
 
@@ -25,12 +25,12 @@ namespace BankServer
             {
                 Console.WriteLine($"Withdraw: {request.Value}");
 
-                this.balance -= request.Value;
+                balance -= request.Value;
 
                 return new WithdrawReply
                 {
                     Value = request.Value,
-                    Balance = this.balance
+                    Balance = balance
                 };
             }
         }
@@ -40,20 +40,20 @@ namespace BankServer
             lock (this)
             {
                 Console.WriteLine($"Deposit: {request.Value}");
-                this.balance += request.Value;
+                balance += request.Value;
                 return new DepositReply
                 {
-                    Balance = this.balance
+                    Balance = balance
                 };
             }
         }
 
         public ReadReply ReadBalance(ReadRequest request)
         {
-            Console.WriteLine($"Read: {this.balance}");
+            Console.WriteLine($"Read: {balance}");
             return new ReadReply
             {
-                Balance = this.balance
+                Balance = balance
             };
         }
     }

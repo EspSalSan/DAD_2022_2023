@@ -1,19 +1,13 @@
-﻿using Grpc.Core;
+﻿using Boney.Services;
+using Grpc.Core;
+using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace Boney
 {
-    public class BoneyPaxos : Paxos.PaxosBase
-    {
-        private int processId;
-        public BoneyPaxos(int processId)
-        {
-            this.processId = processId;
-        }
-    }
-
     internal class Program
     {
         static string GetSolutionDir()
@@ -21,20 +15,11 @@ namespace Boney
             // Leads to /BoneyBank
             return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
         }
-        static void Main(string[] args)
+
+        static Dictionary<string, Paxos.PaxosClient> GetBoneyHost(string[] lines)
         {
-            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
-
-            int processId = int.Parse(args[0]);
-            string host = args[1];
-            int port = int.Parse(args[2]);
-
-            // Read config.txt
-            string baseDirectory = GetSolutionDir();
-            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
-
-            string[] lines = File.ReadAllLines(configFilePath);
-            Dictionary<string, string> boneyHosts = new Dictionary<string, string>();
+            // Search config for boney URLs
+            var boneyHosts = new Dictionary<string, Paxos.PaxosClient>();
 
             foreach (string line in lines)
             {
@@ -42,23 +27,99 @@ namespace Boney
 
                 if (configArgs[0].Equals("P") && configArgs[2].Equals("boney"))
                 {
-                    // todo
-                    //GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    //BankServerService.BankServerServiceClient client = new BankServerService.BankServerServiceClient(channel);
-                    boneyHosts.Add(configArgs[1], configArgs[3]);
+                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
+                    boneyHosts.Add(configArgs[1], new Paxos.PaxosClient(channel));
                 }
             }
+            return boneyHosts;
+        }
+
+        static List<Dictionary<int, string>> GetProcessesState(string[] lines)
+        {
+            // Search config for process state (suspected / not-suspected)
+            List<Dictionary<int, string>> processesStatePerSlot = new List<Dictionary<int, string>>();
+
+            // Regex to detect the triplet, e.g.: (1, N, NS)
+            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
+            Regex rg = new Regex(pattern);
+
+            foreach (string line in lines)
+            {
+                if (line[0].Equals('F'))
+                {
+                    var processesStateSlot = new Dictionary<int, string>();
+
+                    MatchCollection matched = rg.Matches(line);
+                    foreach (Match match in matched)
+                    {
+                        string[] values = match.Value.Split(", ");
+
+                        int processId = int.Parse(values[0].Remove(0, 1));
+                        string state = values[2].Remove(values[2].Length - 1);
+
+                        processesStateSlot.Add(processId, state);
+                    }
+
+                    // FUTURE USE PRINT DICTIONARY VERY USEFULL
+                    //processesStateSlot.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
+                    processesStatePerSlot.Add(processesStateSlot);
+                }
+            }
+            return processesStatePerSlot;
+        }
+
+        static (int slotDuration, TimeSpan startTime) GetSlotsDetails(string[] lines)
+        {
+            int slotDuration = -1;
+            TimeSpan startTime = new TimeSpan();
+
+            foreach (string line in lines)
+            {
+                if (line[0].Equals('T'))
+                {
+                    string[] configArgs = line.Split(" ");
+                    string[] time = configArgs[1].Split(":");
+                    startTime = new TimeSpan(int.Parse(time[0]), int.Parse(time[1]), int.Parse(time[2]));
+                }
+                if (line[0].Equals('D'))
+                {
+                    string[] configArgs = line.Split(" ");
+                    slotDuration = int.Parse(configArgs[1]);
+                }
+            }
+            return (slotDuration, startTime);
+        }
+        static void Main(string[] args)
+        {
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+            // Read config.txt
+            string baseDirectory = GetSolutionDir();
+            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
+            string[] lines = File.ReadAllLines(configFilePath);
+
+            // Initial data
+            int processId = int.Parse(args[0]);
+            string host = args[1];
+            int port = int.Parse(args[2]);
+            Dictionary<string, Paxos.PaxosClient> boneyHosts = GetBoneyHost(lines);
+            List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
+            (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
+
+            ServerService serverService = new ServerService(processId);
 
             Server server = new Server
             {
-                Services = { Paxos.BindService(new BoneyPaxos(processId)) },
+                Services = { 
+                    Paxos.BindService(new PaxosService(serverService)),
+                    CompareAndSwap.BindService(new CompareAndSwapService(serverService))
+                },
                 Ports = { new ServerPort(host, port, ServerCredentials.Insecure) }
             };
 
             server.Start();
 
-            Console.WriteLine("process id:" + processId);
-            Console.WriteLine("ChatServer server listening on port " + args[2]);
+            Console.WriteLine("Boney (" + processId + ") listening on port " + port);
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();
 

@@ -1,10 +1,10 @@
-﻿using Grpc.Core;
+﻿using BankServer.Services;
+using Grpc.Core;
 using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace BankServer
 {
@@ -37,7 +37,7 @@ namespace BankServer
         static Dictionary<string, CompareAndSwap.CompareAndSwapClient> GetBoneyHost(string[] lines)
         {
             // Search config for boney URLs
-            var bankHosts = new Dictionary<string, CompareAndSwap.CompareAndSwapClient>();
+            var boneyHosts = new Dictionary<string, CompareAndSwap.CompareAndSwapClient>();
 
             foreach (string line in lines)
             {
@@ -46,10 +46,10 @@ namespace BankServer
                 if (configArgs[0].Equals("P") && configArgs[2].Equals("boney"))
                 {
                     GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    bankHosts.Add(configArgs[1], new CompareAndSwap.CompareAndSwapClient(channel));
+                    boneyHosts.Add(configArgs[1], new CompareAndSwap.CompareAndSwapClient(channel));
                 }
             }
-            return bankHosts;
+            return boneyHosts;
         }
 
         static List<Dictionary<int, string>> GetProcessesState(string[] lines)
@@ -110,6 +110,11 @@ namespace BankServer
 
         static void Main(string[] args)
         {
+            /* TODO
+             * Onde guardar as funcoes de cliente ? (sendo que as funcoes de servidor ja estao no Services/
+             * Talvez criar uma biblioteca para guardar as funcoes de ler a config
+             */
+
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
             // Read config.txt
@@ -140,7 +145,7 @@ namespace BankServer
 
             server.Start();
 
-            Console.WriteLine("Bank Server (" + processId +  ") listening on port " + args[2]);
+            Console.WriteLine("Bank Server (" + processId +  ") listening on port " + port);
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();
 

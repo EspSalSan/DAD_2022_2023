@@ -1,6 +1,8 @@
-﻿using System;
+﻿using Grpc.Core;
+using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Boney.Services
 {
@@ -11,6 +13,11 @@ namespace Boney.Services
         public CompareAndSwapService(ServerService serverService)
         {
             this.serverService = serverService;
+        }
+
+        public override Task<CompareAndSwapReply> CompareAndSwap(CompareAndSwapRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(serverService.CompareAndSwapBoney(request));
         }
     }
 }

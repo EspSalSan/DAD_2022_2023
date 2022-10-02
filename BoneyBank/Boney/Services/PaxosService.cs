@@ -19,5 +19,10 @@ namespace Boney.Services
         {
             return Task.FromResult(serverService.PreparePaxos(request));
         }
+
+        public override Task<AcceptReply> Porpose(PorposeRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(serverService.PorposePaxos(request));
+        }
     }
 }

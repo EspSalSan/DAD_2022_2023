@@ -2,7 +2,7 @@ syntax = "proto3";
 
 service Paxos {
   rpc Prepare(PrepareRequest) returns (PromiseReply);
-  rpc Accept(AcceptRequest) returns (AcceptReply);
+  rpc Porpose(PorposeRequest) returns (AcceptReply);
 }
 
 message PrepareRequest {
@@ -13,7 +13,7 @@ message PromiseReply {
     int32 value = 2;
 }
 
-message AcceptRequest {
+message PorposeRequest {
   int32 leaderId = 1;
   int32 value = 2;
 }

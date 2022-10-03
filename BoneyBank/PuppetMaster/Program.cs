@@ -30,16 +30,16 @@ namespace PuppetMaster
         {
             // Not MacOS friendly because it compiles to .dll and not .exe
             string baseDirectory = GetSolutionDir();
-            string clientPath = Path.Combine(baseDirectory, "BankClient", "bin", "Debug", "netcoreapp3.1", "BankClient.exe");
-            string serverPath = Path.Combine(baseDirectory, "BankServer", "bin", "Debug", "netcoreapp3.1", "BankServer.exe");
-            string boneyPath = Path.Combine(baseDirectory, "Boney", "bin", "Debug", "netcoreapp3.1", "Boney.exe");
+            string clientPath = Path.Combine(baseDirectory, "BankClient", "bin", "Debug", "netcoreapp3.1", "BankClient.dll");
+            string serverPath = Path.Combine(baseDirectory, "BankServer", "bin", "Debug", "netcoreapp3.1", "BankServer.dll");
+            string boneyPath = Path.Combine(baseDirectory, "Boney", "bin", "Debug", "netcoreapp3.1", "Boney.dll");
 
             string id = configArgs[1];
             string name = configArgs[2];
 
             if (name.Equals("client"))
             {
-                return StartProcess(clientPath, id);
+                return StartProcess("dotnet", clientPath + " " + id);
             }
             else if (name.Equals("boney") || name.Equals("bank"))
             {
@@ -51,11 +51,11 @@ namespace PuppetMaster
 
                 if (name.Equals("bank"))
                 {
-                    return StartProcess(serverPath, id + " " + host + " " + port);
+                    return StartProcess("dotnet", serverPath + " " + id + " " + host + " " + port);
                 }
                 else
                 {
-                    return StartProcess(boneyPath, id + " " + host + " " + port);
+                    return StartProcess("dotnet", boneyPath + " " + id + " " + host + " " + port);
                 }
             }
             else

@@ -17,7 +17,7 @@ namespace Boney.Services
 
         public override Task<CompareAndSwapReply> CompareAndSwap(CompareAndSwapRequest request, ServerCallContext context)
         {
-            return Task.FromResult(serverService.CompareAndSwapBoney(request));
+            return Task.FromResult(serverService.CompareAndSwap(request));
         }
     }
 }

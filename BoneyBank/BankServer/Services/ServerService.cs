@@ -8,6 +8,7 @@ namespace BankServer.Services
     {
         private int processId;
         private int balance;
+        
         public ServerService(int processId)
         {
             balance = 0;
@@ -24,9 +25,7 @@ namespace BankServer.Services
             lock (this)
             {
                 Console.WriteLine($"Withdraw: {request.Value}");
-
                 balance -= request.Value;
-
                 return new WithdrawReply
                 {
                     Value = request.Value,
@@ -50,10 +49,34 @@ namespace BankServer.Services
 
         public ReadReply ReadBalance(ReadRequest request)
         {
+            // lock for read?
             Console.WriteLine($"Read: {balance}");
             return new ReadReply
             {
                 Balance = balance
+            };
+        }
+
+        /*
+         * Two Phase Commit Service Implementation
+         * Communication between BankServer and BankServer
+         */
+
+        public TentativeReply Tentative(TentativeRequest request)
+        {
+            // TODO
+            return new TentativeReply
+            {
+
+            };
+        }
+
+        public  CommitReply Commit(CommitRequest request)
+        {
+            // TODO
+            return new CommitReply
+            {
+
             };
         }
     }

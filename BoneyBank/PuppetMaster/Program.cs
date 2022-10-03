@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 
@@ -12,18 +13,20 @@ namespace PuppetMaster
             return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
         }
 
-        static void StartProcess(string path, string args)
+        static Process StartProcess(string path, string args)
         {
             ProcessStartInfo p_info = new ProcessStartInfo();
+
             p_info.UseShellExecute = true;
             p_info.CreateNoWindow = false;
             p_info.WindowStyle = ProcessWindowStyle.Normal;
             p_info.FileName = path;
             p_info.Arguments = args;
-            Process.Start(p_info);
+
+            return Process.Start(p_info);
         }
 
-        static void CreateProcess(string[] configArgs)
+        static Process CreateProcess(string[] configArgs)
         {
             // Not MacOS friendly because it compiles to .dll and not .exe
             string baseDirectory = GetSolutionDir();
@@ -36,7 +39,7 @@ namespace PuppetMaster
 
             if (name.Equals("client"))
             {
-                StartProcess(clientPath, id);
+                return StartProcess(clientPath, id);
             }
             else if (name.Equals("boney") || name.Equals("bank"))
             {
@@ -48,17 +51,17 @@ namespace PuppetMaster
 
                 if (name.Equals("bank"))
                 {
-                    StartProcess(serverPath, id + " " + host + " " + port);
+                    return StartProcess(serverPath, id + " " + host + " " + port);
                 }
                 else
                 {
-                    StartProcess(boneyPath, id + " " + host + " " + port);
+                    return StartProcess(boneyPath, id + " " + host + " " + port);
                 }
             }
             else
             {
                 Console.WriteLine("Incorrect config file.");
-                return;
+                return null;
             }
         }
 
@@ -73,15 +76,31 @@ namespace PuppetMaster
                 return;
             }
 
+            List<Process> processList = new List<Process>();
+
             foreach(string line in File.ReadAllLines(configFilePath))
             {
                 string[] configArgs = line.Split(" ");
 
                 if (configArgs[0].Equals("P"))
                 {
-                    CreateProcess(configArgs);
+                    Process p = CreateProcess(configArgs);
+                    if(p != null)
+                    {
+                        processList.Add(p);
+                    }
                 }
-            }    
+            }
+
+            /*  Tentative de fechar os terminais que não funciona
+            Console.Write("Type something to end all processes.");
+            Console.ReadKey();
+            processList.ForEach(p => {
+                Console.WriteLine("Ending process " + p.Id);
+                p.CloseMainWindow();
+                p.Close();
+            }); 
+            */
         }
     }
 }

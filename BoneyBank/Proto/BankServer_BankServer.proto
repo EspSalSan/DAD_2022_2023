@@ -1,8 +1,8 @@
 syntax = "proto3";
 
 service TwoPhaseCommit {
-	rpc Tentative(TentativeRequest) returns (TentativeResponse);
-	rpc Commit(CommitRequest) returns (CommitResponse);
+	rpc Tentative(TentativeRequest) returns (TentativeReply);
+	rpc Commit(CommitRequest) returns (CommitReply);
 }
 
 // rever o que é preciso enviar em cada mensagem
@@ -10,7 +10,7 @@ message TentativeRequest {
 	int32 processId = 1;
 	int32 sequenceNumber = 2;
 }
-message TentativeResponse {
+message TentativeReply {
 	bool success = 1;
 }
 
@@ -18,7 +18,7 @@ message CommitRequest {
 	int32 processId = 1;
 	int32 sequenceNumber = 2;
 }
-message CommitResponse {
+message CommitReply {
 	bool success = 1;
 }
 

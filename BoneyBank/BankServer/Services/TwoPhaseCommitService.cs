@@ -1,6 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using Grpc.Core;
+using System.Threading.Tasks;
 
 namespace BankServer.Services
 {
@@ -11,6 +10,16 @@ namespace BankServer.Services
         public TwoPhaseCommitService(ServerService serverService)
         {
             this.serverService = serverService;
+        }
+
+        public override Task<TentativeReply> Tentative(TentativeRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(serverService.Tentative(request));
+        }
+
+        public override Task<CommitReply> Commit(CommitRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(serverService.Commit(request));
         }
     }
 }

@@ -54,9 +54,12 @@ namespace Boney.Services
         }
 
 
-        public CompareAndSwapReply CompareAndSwapBoney(CompareAndSwapRequest request)
+        public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
         {
-            return null;
+            // TODO
+            return new CompareAndSwapReply{
+
+            };
         }
     }
 }

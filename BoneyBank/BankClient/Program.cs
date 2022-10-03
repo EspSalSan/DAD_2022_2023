@@ -2,7 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BankClient
 {
@@ -97,13 +100,12 @@ namespace BankClient
 
             DepositRequest depositRequest = new DepositRequest { Value = int.Parse(commandArgs[1]) };
 
-            // IS THIS PARALLEL ? no. SHOULD IT BE ?
             // Send request to all bank processes
             foreach (var entry in bankHosts)
             {
                 try
                 {
-                    DepositReply depositReply = entry.Value.Deposit(depositRequest, deadline: DateTime.UtcNow.AddSeconds(2));
+                    DepositReply depositReply = entry.Value.Deposit(depositRequest);
                     // Maybe use logging instead of console.writeline
                     Console.WriteLine("reply: ");
                     Console.WriteLine("\tBalance: " + depositReply.Balance);
@@ -130,7 +132,7 @@ namespace BankClient
             {
                 try
                 {
-                    WithdrawReply withdrawReply = entry.Value.Withdraw(withdrawRequest, deadline: DateTime.UtcNow.AddSeconds(2));
+                    WithdrawReply withdrawReply = entry.Value.Withdraw(withdrawRequest);
                     Console.WriteLine("reply: ");
                     Console.WriteLine("\tBalance: " + withdrawReply.Balance);
                 }
@@ -156,7 +158,7 @@ namespace BankClient
             {
                 try
                 {
-                    ReadReply readReply = entry.Value.Read(readRequest, deadline: DateTime.UtcNow.AddSeconds(2));
+                    ReadReply readReply = entry.Value.Read(readRequest);
                     Console.WriteLine("reply: ");
                     Console.WriteLine("\tBalance: " + readReply.Balance);
                 }

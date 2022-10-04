@@ -9,5 +9,6 @@ message CompareAndSwapRequest {
 	int32 invalue = 2;
 }
 message CompareAndSwapReply {
-	int32 outvalue = 1;
+	int32 slot = 1;
+	int32 outvalue = 2;
 }

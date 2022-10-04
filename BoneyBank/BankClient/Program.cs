@@ -106,9 +106,7 @@ namespace BankClient
                 try
                 {
                     DepositReply depositReply = entry.Value.Deposit(depositRequest);
-                    // Maybe use logging instead of console.writeline
-                    Console.WriteLine("reply: ");
-                    Console.WriteLine("\tBalance: " + depositReply.Balance);
+                    Console.WriteLine($"Deposit response: {depositReply.Balance}");
                 }
                 catch (Grpc.Core.RpcException e)
                 {
@@ -133,8 +131,7 @@ namespace BankClient
                 try
                 {
                     WithdrawReply withdrawReply = entry.Value.Withdraw(withdrawRequest);
-                    Console.WriteLine("reply: ");
-                    Console.WriteLine("\tBalance: " + withdrawReply.Balance);
+                    Console.WriteLine($"Withdraw response: {withdrawReply.Balance}");
                 }
                 catch (Grpc.Core.RpcException e)
                 {
@@ -159,8 +156,7 @@ namespace BankClient
                 try
                 {
                     ReadReply readReply = entry.Value.Read(readRequest);
-                    Console.WriteLine("reply: ");
-                    Console.WriteLine("\tBalance: " + readReply.Balance);
+                    Console.WriteLine($"Read balance response: {readReply.Balance}");
                 }
                 catch (Grpc.Core.RpcException e)
                 {
@@ -185,7 +181,7 @@ namespace BankClient
             List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
             (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
 
-            Console.WriteLine("Bank Client with id: " + processId);
+            Console.WriteLine($"Bank Client ({processId}) starting...");
 
             while (true) {
 

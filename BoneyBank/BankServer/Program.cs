@@ -5,11 +5,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace BankServer
 {
     internal class Program
     {
+
+        private static System.Threading.Timer timer;
+
         static string GetSolutionDir()
         {
             // Leads to /BoneyBank
@@ -108,6 +112,26 @@ namespace BankServer
             return (slotDuration, startTime);
         }
 
+        static private void TestingSlots()
+        {
+            Console.WriteLine("Starting new slot...");
+        }
+
+        static private void SetUpTimer(TimeSpan time, int slotDuration)
+        {
+            TimeSpan timeToGo = time - DateTime.Now.TimeOfDay;
+            if(timeToGo < TimeSpan.Zero)
+            {
+                Console.WriteLine("Slot starting time too soon...");
+                return;
+            }
+
+            var testtimer = new System.Threading.Timer(x =>
+            {
+                TestingSlots();
+            }, null, (int)(timeToGo).TotalMilliseconds, slotDuration);
+        }
+
         static void Main(string[] args)
         {
             /* TODO
@@ -145,7 +169,16 @@ namespace BankServer
 
             server.Start();
 
-            Console.WriteLine("Bank Server (" + processId +  ") listening on port " + port);
+            Console.WriteLine($"Bank Server ({processId}) listening on port {port}");
+            Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
+
+            // Setting timeSpan to 5 seconds from Now just for testing
+            TimeSpan timeSpan = DateTime.Now.TimeOfDay;
+            timeSpan += TimeSpan.FromSeconds(5);
+
+            // Starts thread in timeSpan
+            SetUpTimer(timeSpan, slotDuration);
+
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();
 

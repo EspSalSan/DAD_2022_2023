@@ -1,22 +1,24 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Collections.Concurrent;
 
 namespace BankServer.Services
 {
     public class ServerService
     {
         private int processId;
+        private int currentSlot;
         private int balance;
+        private ConcurrentDictionary<int, int> lastKnownSequenceNumber;
         
         public ServerService(int processId)
         {
-            balance = 0;
             this.processId = processId;
+            this.balance = 0;
+            this.currentSlot = 0;
         }
 
         /*
-         * Bank Service Implementation
+         * Bank Service (Server) Implementation
          * Communication between BankClient and BankServer
          */
 
@@ -58,7 +60,7 @@ namespace BankServer.Services
         }
 
         /*
-         * Two Phase Commit Service Implementation
+         * Two Phase Commit Service (Client/Server) Implementation
          * Communication between BankServer and BankServer
          */
 
@@ -79,5 +81,27 @@ namespace BankServer.Services
 
             };
         }
+
+        /*
+         * Cleanup Service (Client/Server) Implementation
+         * Communication between BankServer and BankServer
+         */
+
+        public ListPendingRequestsReply Cleanup(ListPendingRequestsRequest request)
+        {
+            // TODO
+            return new ListPendingRequestsReply
+            {
+
+            };
+        }
+
+        /*
+         * Compare And Swap Service (Client) Implementation
+         * Communication between BankServer and BankServer
+         */
+
+        
+
     }
 }

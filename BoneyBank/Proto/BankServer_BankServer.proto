@@ -22,5 +22,14 @@ message CommitReply {
 	bool success = 1;
 }
 
+service Cleanup {
+	rpc Cleanup(ListPendingRequestsRequest) returns (ListPendingRequestsReply);
+}
 
+message ListPendingRequestsRequest {
+	int32 lastKnownSequenceNumber = 1;
+}
 
+message ListPendingRequestsReply{
+	// Empty ?
+}

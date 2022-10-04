@@ -6,7 +6,9 @@ namespace Boney.Services
 {
     public class ServerService
     {
+        
         private int processId;
+        // Maybe create a PaxosDetails class with all this information per slot
         private bool isPaxosRunning;
         private int currentValue;
         private int readTimestamp;
@@ -23,7 +25,7 @@ namespace Boney.Services
         }
 
         /*
-         * Paxos Service Implementation
+         * Paxos Service (Client/Server) Implementation
          * Communication between Boney and Boney
          */
 
@@ -57,30 +59,34 @@ namespace Boney.Services
         }
 
         /*
-         * Compare And Swap Service Implementation
+         * Compare And Swap Service (Server) Implementation
          * Communication between Bank and Boney
          */
 
         public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
         {
-            if(this.compareAndSwapValue == -1)
+            lock (this)
             {
-                this.compareAndSwapValue = request.Invalue;
-            }
-            else
-            {
-                while (this.isPaxosRunning)
+                if (this.compareAndSwapValue == -1)
                 {
-                    // wait for paxos to end
+                    this.compareAndSwapValue = request.Invalue;
                 }
+                else
+                {
+                    while (this.isPaxosRunning)
+                    {
+                        // wait for paxos to end
+                    }
+                }
+
+                // Do paxos
+
+                return new CompareAndSwapReply
+                {
+                    Slot = request.Slot,
+                    Outvalue = this.currentValue,
+                };
             }
-
-            // Do paxos
-
-            return new CompareAndSwapReply {
-                Slot = request.Slot,
-                Outvalue = this.currentValue,
-            };
         }
     }
 }

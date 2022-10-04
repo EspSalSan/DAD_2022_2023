@@ -5,19 +5,31 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Threading;
 
 namespace BankServer
 {
     internal class Program
     {
-
-        private static System.Threading.Timer timer;
-
         static string GetSolutionDir()
         {
             // Leads to /BoneyBank
             return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
+        }
+
+        static int GetNumberOfProcesses(string[] lines)
+        {
+            int numberOfProcesses = 0;
+
+            foreach (string line in lines)
+            {
+                string[] configArgs = line.Split(" ");
+
+                if (configArgs[0].Equals("P") && (configArgs[2].Equals("boney") || configArgs[2].Equals("bank")))
+                {
+                    numberOfProcesses += 1;
+                }
+            }
+            return numberOfProcesses;
         }
 
         static Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> GetBankHost(string[] lines)
@@ -112,24 +124,36 @@ namespace BankServer
             return (slotDuration, startTime);
         }
 
-        static private void TestingSlots()
+        static private void PrepareSlot(ServerService serverService)
         {
             Console.WriteLine("Starting new slot...");
+            /*
+             * Se guardarmos a informacao dos slots no ServerService
+             *  e.g.: current slot, last pending request,etc
+             *  Então as funcoes que chamamos aqui tambem têm de estar no ServerService
+             *  Não sei se é critico misturar funcoes de Servidor com funcoes de Cliente
+             *  provavelmente não
+             */
+            // should stop processing requests
+            // switch  Normal <-> Freeze
+            // start ComapareAndSwap (this will trigger paxos on boney)
+            // start Cleanup if leader changes
         }
 
-        static private void SetUpTimer(TimeSpan time, int slotDuration)
+        static private void SetSlotTimer(TimeSpan time, int slotDuration, ServerService serverService)
         {
             TimeSpan timeToGo = time - DateTime.Now.TimeOfDay;
             if(timeToGo < TimeSpan.Zero)
             {
-                Console.WriteLine("Slot starting time too soon...");
+                Console.WriteLine("Slot starting before finished server setup.");
+                Console.WriteLine("Aborting...");
                 return;
             }
 
-            var testtimer = new System.Threading.Timer(x =>
+            new System.Threading.Timer(x =>
             {
-                TestingSlots();
-            }, null, (int)(timeToGo).TotalMilliseconds, slotDuration);
+                PrepareSlot(serverService);
+            }, null, (int)timeToGo.TotalMilliseconds, slotDuration);
         }
 
         static void Main(string[] args)
@@ -150,6 +174,7 @@ namespace BankServer
             int processId = int.Parse(args[0]);
             string host = args[1];
             int port = int.Parse(args[2]);
+            int numberOfProcesses = GetNumberOfProcesses(lines);
             Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = GetBankHost(lines);
             Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts = GetBoneyHost(lines);
             List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
@@ -171,13 +196,14 @@ namespace BankServer
 
             Console.WriteLine($"Bank Server ({processId}) listening on port {port}");
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
+            Console.WriteLine($"Working with {numberOfProcesses} processes ({bankHosts.Count} banks and {boneyHosts.Count} boneys)");
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;
             timeSpan += TimeSpan.FromSeconds(5);
 
             // Starts thread in timeSpan
-            SetUpTimer(timeSpan, slotDuration);
+            SetSlotTimer(timeSpan, slotDuration, serverService);
 
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

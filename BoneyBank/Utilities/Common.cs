@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace Utilities
 {
@@ -19,6 +20,18 @@ namespace Utilities
             Address = address;
         }
     }
+    
+    public struct ProcessState
+    {
+        public bool Frozen { get; }
+        public bool Suspected { get; }
+        
+        public ProcessState(bool frozen, bool suspected)
+        {
+            Frozen = frozen;
+            Suspected = suspected;
+        }
+    }
 
     public struct BoneyBankConfig
     {
@@ -28,12 +41,15 @@ namespace Utilities
         
         public (int, TimeSpan) SlotDetails { get; }
         
-        public BoneyBankConfig(List<BankProcess> bankServers, List<BankProcess> boneyServers, int numberOfProcesses, int slotDuration, TimeSpan startTime)
+        public Dictionary<int, ProcessState>[] ProcessStates { get; }
+
+        public BoneyBankConfig(List<BankProcess> bankServers, List<BankProcess> boneyServers, int numberOfProcesses, int slotDuration, TimeSpan startTime, Dictionary<int, ProcessState>[] processStates)
         {
             BankServers = bankServers;
             BoneyServers = boneyServers;
             NumberOfProcesses = numberOfProcesses;
             SlotDetails = (slotDuration, startTime);
+            ProcessStates = processStates;
         }
     }
     
@@ -54,6 +70,10 @@ namespace Utilities
             List<BankProcess> boneyServers = new List<BankProcess>();
             int slotDuration = -1;
             TimeSpan startTime = new TimeSpan();
+            Dictionary<int, ProcessState>[] processStates = null;
+            
+            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
+            Regex rg = new Regex(pattern);
 
             foreach (string line in lines)
             {
@@ -83,9 +103,35 @@ namespace Utilities
                 {
                     slotDuration = int.Parse(args[1]);
                 }
+                else if (args[0].Equals("S"))
+                {
+                    int numberOfSlots = int.Parse(args[1]);
+                    processStates = new Dictionary<int, ProcessState>[numberOfSlots];
+                }
+                else if (args[0].Equals("F"))
+                {
+                    if (processStates == null)
+                    {
+                        // TODO: invalid config, maybe throw an exception instead of ignoring
+                        continue;
+                    }
+                    
+                    MatchCollection matched = rg.Matches(line);
+                    int slotId = int.Parse(args[1]);
+                    processStates[slotId] = new Dictionary<int, ProcessState>();
+                    
+                    foreach (Match match in matched)
+                    {
+                        string[] values = match.Value.Split(",");
+                        int processId = int.Parse(values[0].Remove(0, 1));
+                        bool frozen = values[1].Equals("F");
+                        bool suspected = values[2].Remove(values[2].Length - 1).Equals("S");
+                        processStates[slotId].Add(processId, new ProcessState(frozen, suspected));
+                    }
+                }
             }
             
-            return new BoneyBankConfig(bankServers, boneyServers, numberOfProcesses, slotDuration, startTime);
+            return new BoneyBankConfig(bankServers, boneyServers, numberOfProcesses, slotDuration, startTime, processStates);
         }
     }
 }

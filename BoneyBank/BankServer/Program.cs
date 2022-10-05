@@ -5,80 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Utilities;
 
 namespace BankServer
 {
     internal class Program
     {
-        static List<Dictionary<int, bool>> GetProcessesSuspected(string[] lines)
-        {
-            // Search config for processes state (suspected / not-suspected)
-            List<Dictionary<int, bool>> processesSuspectedPerSlot = new List<Dictionary<int, bool>>();
-
-            // Regex to detect the triplet, e.g.: (1, N, NS)
-            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
-            Regex rg = new Regex(pattern);
-
-            foreach (string line in lines)
-            {
-                if (line[0].Equals('F'))
-                {
-                    var processesStateSlot = new Dictionary<int, bool>();
-
-                    MatchCollection matched = rg.Matches(line);
-                    foreach (Match match in matched)
-                    {
-                        string[] values = match.Value.Split(", ");
-
-                        int processId = int.Parse(values[0].Remove(0, 1));
-                        string state = values[2].Remove(values[2].Length - 1);
-
-                        processesStateSlot.Add(processId, state.Equals("S"));
-                    }
-
-                    // FUTURE USE PRINT DICTIONARY VERY USEFULL
-                    //processesStateSlot.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
-                    processesSuspectedPerSlot.Add(processesStateSlot);
-                }
-            }
-            return processesSuspectedPerSlot;
-        }
-
-        static List<bool> GetProcessStatePerSlot(string[] lines, int currentProcessId)
-        {
-            // Search config for process state across slots
-            List<bool> processFrozenPerSlot = new List<bool>();
-
-            // Regex to detect the triplet, e.g.: (1, N, NS)
-            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
-            Regex rg = new Regex(pattern);
-
-            foreach (string line in lines)
-            {
-                if (line[0].Equals('F'))
-                {
-                    var processesStateSlot = new Dictionary<int, string>();
-
-                    MatchCollection matched = rg.Matches(line);
-                    foreach (Match match in matched)
-                    {
-                        string[] values = match.Value.Split(", ");
-
-                        int processId = int.Parse(values[0].Remove(0, 1));
-
-                        if(currentProcessId == processId)
-                        {
-                            string state = values[1];
-                            processFrozenPerSlot.Add(state.Equals("F"));
-                        }
-                    }
-                }
-            }
-            return processFrozenPerSlot;
-        }
-        
         static private void SetSlotTimer(TimeSpan time, int slotDuration, ServerService serverService)
         {
             TimeSpan timeToGo = time - DateTime.Now.TimeOfDay;
@@ -104,16 +36,12 @@ namespace BankServer
              */
 
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
-
-            // Read config.txt
-            string baseDirectory = Common.GetSolutionDir();
-            string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
-            string[] lines = File.ReadAllLines(configFilePath);
-
+            
             // Command Line Arguments
             int processId = int.Parse(args[0]);
             string host = args[1];
             int port = int.Parse(args[2]);
+            
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
             int numberOfProcesses = config.NumberOfProcesses;
@@ -125,8 +53,11 @@ namespace BankServer
                 key => key.Id.ToString(),
                 value => new CompareAndSwap.CompareAndSwapClient(GrpcChannel.ForAddress(value.Address))
             );
-            List<Dictionary<int, bool>> processesSuspectedPerSlot = GetProcessesSuspected(lines);
-            List<bool> processFrozenPerSlot = GetProcessStatePerSlot(lines, processId);
+            List<Dictionary<int, bool>> processesSuspectedPerSlot = config.ProcessStates.Select(states =>
+            {
+                return states.ToDictionary(key => key.Key, value => value.Value.Suspected);
+            }).ToList();
+            List<bool> processFrozenPerSlot = config.ProcessStates.Select(states => states[processId].Frozen).ToList();
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
 
             // Provavelmente devia receber mais informacao

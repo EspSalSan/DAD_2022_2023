@@ -15,4 +15,8 @@
 	<Protobuf Include="..\Proto\BankClient_BankServer.proto" GrpcServices="Client" Link="Protos\BankClient_BankServer.proto" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Utilities\Utilities.csproj" />
+  </ItemGroup>
+
 </Project>

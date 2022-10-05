@@ -5,17 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using Utilities;
 
 namespace Boney
 {
     internal class Program
     {
-        static string GetSolutionDir()
-        {
-            // Leads to /BoneyBank
-            return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
-        }
-
         static int GetNumberOfProcesses(string[] lines)
         {
             int numberOfProcesses = 0;
@@ -135,7 +130,7 @@ namespace Boney
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
             // Read config.txt
-            string baseDirectory = GetSolutionDir();
+            string baseDirectory = Common.GetSolutionDir();
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
             string[] lines = File.ReadAllLines(configFilePath);
 

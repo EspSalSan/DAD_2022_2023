@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using Utilities;
 
 namespace PuppetMaster
 {
@@ -67,7 +68,7 @@ namespace PuppetMaster
 
         static void Main(string[] args)
         {
-            string baseDirectory = GetSolutionDir();
+            string baseDirectory = Common.GetSolutionDir();
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
 
             if (!File.Exists(configFilePath))

@@ -68,10 +68,44 @@ namespace BankServer
             return boneyHosts;
         }
 
-        static List<Dictionary<int, string>> GetProcessesState(string[] lines)
+        static List<Dictionary<int, bool>> GetProcessesSuspected(string[] lines)
         {
-            // Search config for process state (suspected / not-suspected)
-            List<Dictionary<int, string>> processesStatePerSlot = new List<Dictionary<int, string>>();
+            // Search config for processes state (suspected / not-suspected)
+            List<Dictionary<int, bool>> processesSuspectedPerSlot = new List<Dictionary<int, bool>>();
+
+            // Regex to detect the triplet, e.g.: (1, N, NS)
+            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
+            Regex rg = new Regex(pattern);
+
+            foreach (string line in lines)
+            {
+                if (line[0].Equals('F'))
+                {
+                    var processesStateSlot = new Dictionary<int, bool>();
+
+                    MatchCollection matched = rg.Matches(line);
+                    foreach (Match match in matched)
+                    {
+                        string[] values = match.Value.Split(", ");
+
+                        int processId = int.Parse(values[0].Remove(0, 1));
+                        string state = values[2].Remove(values[2].Length - 1);
+
+                        processesStateSlot.Add(processId, state.Equals("S"));
+                    }
+
+                    // FUTURE USE PRINT DICTIONARY VERY USEFULL
+                    //processesStateSlot.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
+                    processesSuspectedPerSlot.Add(processesStateSlot);
+                }
+            }
+            return processesSuspectedPerSlot;
+        }
+
+        static List<bool> GetProcessStatePerSlot(string[] lines, int currentProcessId)
+        {
+            // Search config for process state across slots
+            List<bool> processFrozenPerSlot = new List<bool>();
 
             // Regex to detect the triplet, e.g.: (1, N, NS)
             string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
@@ -89,17 +123,16 @@ namespace BankServer
                         string[] values = match.Value.Split(", ");
 
                         int processId = int.Parse(values[0].Remove(0, 1));
-                        string state = values[2].Remove(values[2].Length - 1);
 
-                        processesStateSlot.Add(processId, state);
+                        if(currentProcessId == processId)
+                        {
+                            string state = values[1];
+                            processFrozenPerSlot.Add(state.Equals("F"));
+                        }
                     }
-
-                    // FUTURE USE PRINT DICTIONARY VERY USEFULL
-                    //processesStateSlot.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
-                    processesStatePerSlot.Add(processesStateSlot);
                 }
             }
-            return processesStatePerSlot;
+            return processFrozenPerSlot;
         }
 
         static (int slotDuration, TimeSpan startTime) GetSlotsDetails(string[] lines)
@@ -124,21 +157,6 @@ namespace BankServer
             return (slotDuration, startTime);
         }
 
-        static private void PrepareSlot(ServerService serverService)
-        {
-            Console.WriteLine("Starting new slot...");
-            /*
-             * Se guardarmos a informacao dos slots no ServerService
-             *  e.g.: current slot, last pending request,etc
-             *  Então as funcoes que chamamos aqui tambem têm de estar no ServerService
-             *  Não sei se é critico misturar funcoes de Servidor com funcoes de Cliente
-             *  provavelmente não
-             */
-            // should stop processing requests
-            // switch  Normal <-> Freeze
-            // start ComapareAndSwap (this will trigger paxos on boney)
-            // start Cleanup if leader changes
-        }
 
         static private void SetSlotTimer(TimeSpan time, int slotDuration, ServerService serverService)
         {
@@ -147,12 +165,13 @@ namespace BankServer
             {
                 Console.WriteLine("Slot starting before finished server setup.");
                 Console.WriteLine("Aborting...");
+                Environment.Exit(0);
                 return;
             }
 
             new System.Threading.Timer(x =>
             {
-                PrepareSlot(serverService);
+                serverService.PrepareSlot();
             }, null, (int)timeToGo.TotalMilliseconds, slotDuration);
         }
 
@@ -170,18 +189,20 @@ namespace BankServer
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
             string[] lines = File.ReadAllLines(configFilePath);
 
-            // Initial data
+            // Command Line Arguments
             int processId = int.Parse(args[0]);
             string host = args[1];
             int port = int.Parse(args[2]);
+            // Data from config file
             int numberOfProcesses = GetNumberOfProcesses(lines);
             Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = GetBankHost(lines);
             Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts = GetBoneyHost(lines);
-            List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
+            List<Dictionary<int, bool>> processesSuspectedPerSlot = GetProcessesSuspected(lines);
+            List<bool> processFrozenPerSlot = GetProcessStatePerSlot(lines, processId);
             (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
 
             // Provavelmente devia receber mais informacao
-            ServerService serverService = new ServerService(processId);
+            ServerService serverService = new ServerService(processId, processFrozenPerSlot, processesSuspectedPerSlot, bankHosts, boneyHosts);
 
             Server server = new Server
             {

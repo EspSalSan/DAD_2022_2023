@@ -12,40 +12,6 @@ namespace Boney
 {
     internal class Program
     {
-        static int GetNumberOfProcesses(string[] lines)
-        {
-            int numberOfProcesses = 0;
-
-            foreach (string line in lines)
-            {
-                string[] configArgs = line.Split(" ");
-
-                if (configArgs[0].Equals("P")  && ( configArgs[2].Equals("boney") || configArgs[2].Equals("bank") ))
-                {
-                    numberOfProcesses += 1;
-                }
-            }
-            return numberOfProcesses;
-        }
-
-        static Dictionary<string, Paxos.PaxosClient> GetBoneyHost(string[] lines)
-        {
-            // Search config for boney URLs
-            var boneyHosts = new Dictionary<string, Paxos.PaxosClient>();
-
-            foreach (string line in lines)
-            {
-                string[] configArgs = line.Split(" ");
-
-                if (configArgs[0].Equals("P") && configArgs[2].Equals("boney"))
-                {
-                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    boneyHosts.Add(configArgs[1], new Paxos.PaxosClient(channel));
-                }
-            }
-            return boneyHosts;
-        }
-
         static List<Dictionary<int, string>> GetProcessesState(string[] lines)
         {
             // Search config for process state (suspected / not-suspected)
@@ -79,29 +45,7 @@ namespace Boney
             }
             return processesStatePerSlot;
         }
-
-        static (int slotDuration, TimeSpan startTime) GetSlotsDetails(string[] lines)
-        {
-            int slotDuration = -1;
-            TimeSpan startTime = new TimeSpan();
-
-            foreach (string line in lines)
-            {
-                if (line[0].Equals('T'))
-                {
-                    string[] configArgs = line.Split(" ");
-                    string[] time = configArgs[1].Split(":");
-                    startTime = new TimeSpan(int.Parse(time[0]), int.Parse(time[1]), int.Parse(time[2]));
-                }
-                if (line[0].Equals('D'))
-                {
-                    string[] configArgs = line.Split(" ");
-                    slotDuration = int.Parse(configArgs[1]);
-                }
-            }
-            return (slotDuration, startTime);
-        }
-
+        
         static private void PrepareSlot(ServerService serverService)
         {
             Console.WriteLine("Starting new slot...");
@@ -147,7 +91,7 @@ namespace Boney
             );
             
             List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
-            (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
+            (int slotDuration, TimeSpan startTime) = config.SlotDetails;
 
             ServerService serverService = new ServerService(processId);
 

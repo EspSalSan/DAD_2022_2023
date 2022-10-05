@@ -78,30 +78,7 @@ namespace BankServer
             }
             return processFrozenPerSlot;
         }
-
-        static (int slotDuration, TimeSpan startTime) GetSlotsDetails(string[] lines)
-        {
-            int slotDuration = -1;
-            TimeSpan startTime = new TimeSpan();
-
-            foreach (string line in lines)
-            {
-                if (line[0].Equals('T'))
-                {
-                    string[] configArgs = line.Split(" ");
-                    string[] time = configArgs[1].Split(":");
-                    startTime = new TimeSpan(int.Parse(time[0]), int.Parse(time[1]), int.Parse(time[2]));
-                }
-                if (line[0].Equals('D'))
-                {
-                    string[] configArgs = line.Split(" ");
-                    slotDuration = int.Parse(configArgs[1]);
-                }
-            }
-            return (slotDuration, startTime);
-        }
-
-
+        
         static private void SetSlotTimer(TimeSpan time, int slotDuration, ServerService serverService)
         {
             TimeSpan timeToGo = time - DateTime.Now.TimeOfDay;
@@ -150,7 +127,7 @@ namespace BankServer
             );
             List<Dictionary<int, bool>> processesSuspectedPerSlot = GetProcessesSuspected(lines);
             List<bool> processFrozenPerSlot = GetProcessStatePerSlot(lines, processId);
-            (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
+            (int slotDuration, TimeSpan startTime) = config.SlotDetails;
 
             // Provavelmente devia receber mais informacao
             ServerService serverService = new ServerService(processId, processFrozenPerSlot, processesSuspectedPerSlot, bankHosts, boneyHosts);

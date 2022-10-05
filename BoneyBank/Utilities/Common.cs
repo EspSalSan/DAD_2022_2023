@@ -26,11 +26,14 @@ namespace Utilities
         public List<BankProcess> BoneyServers { get; }
         public int NumberOfProcesses { get; }
         
-        public BoneyBankConfig(List<BankProcess> bankServers, List<BankProcess> boneyServers, int numberOfProcesses)
+        public (int, TimeSpan) SlotDetails { get; }
+        
+        public BoneyBankConfig(List<BankProcess> bankServers, List<BankProcess> boneyServers, int numberOfProcesses, int slotDuration, TimeSpan startTime)
         {
             BankServers = bankServers;
             BoneyServers = boneyServers;
             NumberOfProcesses = numberOfProcesses;
+            SlotDetails = (slotDuration, startTime);
         }
     }
     
@@ -49,6 +52,8 @@ namespace Utilities
             int numberOfProcesses = 0;
             List<BankProcess> bankServers = new List<BankProcess>();
             List<BankProcess> boneyServers = new List<BankProcess>();
+            int slotDuration = -1;
+            TimeSpan startTime = new TimeSpan();
 
             foreach (string line in lines)
             {
@@ -69,9 +74,18 @@ namespace Utilities
                             break;
                     }
                 }
+                else if (args[0].Equals("T"))
+                {
+                    string[] time = args[1].Split(":");
+                    startTime = new TimeSpan(int.Parse(time[0]), int.Parse(time[1]), int.Parse(time[2]));
+                }
+                else if (args[0].Equals("D"))
+                {
+                    slotDuration = int.Parse(args[1]);
+                }
             }
             
-            return new BoneyBankConfig(bankServers, boneyServers, numberOfProcesses);
+            return new BoneyBankConfig(bankServers, boneyServers, numberOfProcesses, slotDuration, startTime);
         }
     }
 }

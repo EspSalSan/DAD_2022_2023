@@ -9,9 +9,11 @@ using Utilities;
 
 namespace BankClient
 {
+    using BankHosts = Dictionary<int, Bank.BankClient>;
+
     internal class Program
     {
-        static void SendDepositRequest(string[] commandArgs, Dictionary<int, Bank.BankClient> bankHosts)
+        static void SendDepositRequest(string[] commandArgs, BankHosts bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 2)
@@ -36,7 +38,7 @@ namespace BankClient
             }
         }
 
-        static void SendWithdrawRequest(string[] commandArgs, Dictionary<int, Bank.BankClient> bankHosts)
+        static void SendWithdrawRequest(string[] commandArgs, BankHosts bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 2)
@@ -61,7 +63,7 @@ namespace BankClient
             }
         }
 
-        static void SendReadBalanceRequest(string[] commandArgs, Dictionary<int, Bank.BankClient> bankHosts)
+        static void SendReadBalanceRequest(string[] commandArgs, BankHosts bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 1)
@@ -94,7 +96,7 @@ namespace BankClient
             // Initial data
             int processId = int.Parse(args[0]);
             BoneyBankConfig config = Common.ReadConfig();
-            Dictionary <int, Bank.BankClient> bankHosts = config.BankServers.ToDictionary(key => key.Id, value =>
+            BankHosts bankHosts = config.BankServers.ToDictionary(key => key.Id, value =>
             {
                 GrpcChannel channel = GrpcChannel.ForAddress(value.Address);
                 return new Bank.BankClient(channel);

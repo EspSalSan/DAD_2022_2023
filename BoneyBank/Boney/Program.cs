@@ -4,6 +4,7 @@ using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Utilities;
 
@@ -138,8 +139,13 @@ namespace Boney
             int processId = int.Parse(args[0]);
             string host = args[1];
             int port = int.Parse(args[2]);
-            int numberOfProcesses = GetNumberOfProcesses(lines);
-            Dictionary<string, Paxos.PaxosClient> boneyHosts = GetBoneyHost(lines);
+            BoneyBankConfig config = Common.ReadConfig();
+            int numberOfProcesses = config.NumberOfProcesses;
+            Dictionary<string, Paxos.PaxosClient> boneyHosts = config.BoneyServers.ToDictionary(
+                key => key.Id.ToString(), 
+                value => new Paxos.PaxosClient(GrpcChannel.ForAddress(value.Address))
+            );
+            
             List<Dictionary<int, string>> processesStatePerSlot = GetProcessesState(lines);
             (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);
 

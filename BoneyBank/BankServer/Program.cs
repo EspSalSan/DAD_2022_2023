@@ -4,6 +4,7 @@ using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Utilities;
 
@@ -11,58 +12,6 @@ namespace BankServer
 {
     internal class Program
     {
-        static int GetNumberOfProcesses(string[] lines)
-        {
-            int numberOfProcesses = 0;
-
-            foreach (string line in lines)
-            {
-                string[] configArgs = line.Split(" ");
-
-                if (configArgs[0].Equals("P") && (configArgs[2].Equals("boney") || configArgs[2].Equals("bank")))
-                {
-                    numberOfProcesses += 1;
-                }
-            }
-            return numberOfProcesses;
-        }
-
-        static Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> GetBankHost(string[] lines)
-        {
-            // Search config for bank URLs
-            var bankHosts = new Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient>();
-
-            foreach (string line in lines)
-            {
-                string[] configArgs = line.Split(" ");
-
-                if (configArgs[0].Equals("P") && configArgs[2].Equals("bank"))
-                {
-                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    bankHosts.Add(configArgs[1], new TwoPhaseCommit.TwoPhaseCommitClient(channel));
-                }
-            }
-            return bankHosts;
-        }
-
-        static Dictionary<string, CompareAndSwap.CompareAndSwapClient> GetBoneyHost(string[] lines)
-        {
-            // Search config for boney URLs
-            var boneyHosts = new Dictionary<string, CompareAndSwap.CompareAndSwapClient>();
-
-            foreach (string line in lines)
-            {
-                string[] configArgs = line.Split(" ");
-
-                if (configArgs[0].Equals("P") && configArgs[2].Equals("boney"))
-                {
-                    GrpcChannel channel = GrpcChannel.ForAddress(configArgs[3]);
-                    boneyHosts.Add(configArgs[1], new CompareAndSwap.CompareAndSwapClient(channel));
-                }
-            }
-            return boneyHosts;
-        }
-
         static List<Dictionary<int, bool>> GetProcessesSuspected(string[] lines)
         {
             // Search config for processes state (suspected / not-suspected)
@@ -189,9 +138,16 @@ namespace BankServer
             string host = args[1];
             int port = int.Parse(args[2]);
             // Data from config file
-            int numberOfProcesses = GetNumberOfProcesses(lines);
-            Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = GetBankHost(lines);
-            Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts = GetBoneyHost(lines);
+            BoneyBankConfig config = Common.ReadConfig();
+            int numberOfProcesses = config.NumberOfProcesses;
+            Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(
+                key => key.Id.ToString(), 
+                value => new TwoPhaseCommit.TwoPhaseCommitClient(GrpcChannel.ForAddress(value.Address))
+            );
+            Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts = config.BoneyServers.ToDictionary(
+                key => key.Id.ToString(),
+                value => new CompareAndSwap.CompareAndSwapClient(GrpcChannel.ForAddress(value.Address))
+            );
             List<Dictionary<int, bool>> processesSuspectedPerSlot = GetProcessesSuspected(lines);
             List<bool> processFrozenPerSlot = GetProcessStatePerSlot(lines, processId);
             (int slotDuration, TimeSpan startTime) = GetSlotsDetails(lines);

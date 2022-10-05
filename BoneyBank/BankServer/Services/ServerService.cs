@@ -1,24 +1,24 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace BankServer.Services
 {
     public class ServerService
     {
-        // From config file
-        private int processId;
-        private List<Dictionary<int, bool>> processesSuspectedPerSlot;
-        private List<bool> processFrozenPerSlot;
-        private Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts;
-        private Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts;
+        // Config file variables
+        private readonly int processId;
+        private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
+        private readonly List<bool> processFrozenPerSlot;
+        private readonly Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts;
+        private readonly Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts;
 
-        // Everything else
+        // Changing variables
         private int currentSlot;
         private int currentBankLeader;
         private bool isFrozen;
         private int balance;
-        private ConcurrentDictionary<int, int> lastKnownSequenceNumber;
+        private Dictionary<int, int> lastKnownSequenceNumber;
 
         public ServerService(
             int processId, 
@@ -40,14 +40,6 @@ namespace BankServer.Services
             this.balance = 0;
         }
 
-        /*
-        * Se guardarmos a informacao dos slots no ServerService
-        *  e.g.: current slot, last pending request,etc
-        *  Então as funcoes que chamamos aqui tambem têm de estar no ServerService
-        *  Não sei se é critico misturar funcoes de Servidor com funcoes de Cliente
-        *  provavelmente não
-        */
-
         public void PrepareSlot()
         {
             /*
@@ -59,15 +51,17 @@ namespace BankServer.Services
              * during the switch of slot:
              * if requests come, save then and dont process
              * (maybe) send them to the listOfPending (if the leader is another)
-             * 
-             * 
              */
 
-
+            if(this.currentSlot >= processFrozenPerSlot.Count){
+                Console.WriteLine("No more slots to process.");
+                Console.WriteLine("Aborting...");
+                return;
+            }
 
             this.currentSlot += 1;
 
-            Console.WriteLine($"Starting slot {this.currentSlot}");
+            Console.WriteLine($"Preparing slot {this.currentSlot}");
 
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot - 1];
@@ -80,7 +74,7 @@ namespace BankServer.Services
             foreach (KeyValuePair<int, bool> process in processesSuspected)
             {
                 // Process that is not suspected and has the lowest id
-                if(!process.Value && process.Key < leader)
+                if(!process.Value && process.Key < leader && this.bankHosts.ContainsKey(process.Key))
                 {
                     leader = process.Key;
                 }
@@ -99,9 +93,12 @@ namespace BankServer.Services
                 Slot = currentSlot,
             };
 
+            Console.WriteLine($"Trying to elect process {leader} as leader.");
+
             // Save old leader to know if cleanup is needed
             int oldBankLeader = this.currentBankLeader;
-
+            // TODO se ele suspeita que um boney está frozen envia pedido à mesma ?
+            // TODO deviamos recolher as respostas todas e confirmar que sao iguais ? (pelo paxos deviam)
             // Send request to all bank processes
             foreach (var entry in this.boneyHosts)
             {
@@ -117,16 +114,39 @@ namespace BankServer.Services
                 }
             }
 
+            Console.WriteLine($"Process {this.currentBankLeader} is the new leader.");
+
             // Start Cleanup (if necessary)
-            if(this.currentBankLeader == oldBankLeader)
+            if(this.currentBankLeader != oldBankLeader && this.currentBankLeader == this.processId)
             {
-                // same leader
-                // do we need to do something?
+                // DO CLEANUP
             }
 
-            // leader changed
+
+            // só faz cleanup o processo que se tornou lider e antes nao era 
             // do cleanup();
-            // Send 'ListPendingRequests(LastKnownSequenceNumber)' 
+            // Send 'ListPendingRequests(LastKnownSequenceNumber)' to all banks 
+            // Nodes only reply to this request after they have moved to the new slot and the request comes from the primary assigned for that slot
+            // Wait for a majority of replies
+            // Collect sequence numbers from previous primaries that have not been commited yet
+            // propose and commit those sequence numbers
+            // start assigning new sequence numbers to commands that dont have
+
+            // em portugues:
+            // O (novo) Lider envia o numero de sequencia mais alto que foi committed a todas as replicas
+            // Recebe vários numeros de sequencia que foram proposed mas não committed
+            // Dá propose e commit desses numeros de sequencia
+            // Quando acabar, começa a dar assign de numeros de sequencia a comandos que ainda nao tenham
+
+            // Coisas que 'parecem' ser preciso guardar para cada banco (por slot)
+            /*
+             * Comandos sem sequenceNumber
+             * Comandos com sequenceNumber
+             * Comandos proposed
+             * Comandos commited
+             */
+
+            Console.WriteLine("Preparation ended.");
         }
 
         /*

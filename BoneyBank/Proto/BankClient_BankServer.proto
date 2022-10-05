@@ -22,7 +22,6 @@ message WithdrawReply {
 }
 
 message ReadRequest {
-
 }
 message ReadReply {
 	int32 balance = 2;

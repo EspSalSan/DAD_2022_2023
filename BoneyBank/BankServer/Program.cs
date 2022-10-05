@@ -44,7 +44,9 @@ namespace BankServer
             
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
+
             int numberOfProcesses = config.NumberOfProcesses;
+            (int slotDuration, TimeSpan startTime) = config.SlotDetails;
             Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(
                 key => key.Id, 
                 value => new TwoPhaseCommit.TwoPhaseCommitClient(GrpcChannel.ForAddress(value.Address))
@@ -58,9 +60,8 @@ namespace BankServer
                 return states.ToDictionary(key => key.Key, value => value.Value.Suspected);
             }).ToList();
             List<bool> processFrozenPerSlot = config.ProcessStates.Select(states => states[processId].Frozen).ToList();
-            (int slotDuration, TimeSpan startTime) = config.SlotDetails;
+            
 
-            // Provavelmente devia receber mais informacao
             ServerService serverService = new ServerService(processId, processFrozenPerSlot, processesSuspectedPerSlot, bankHosts, boneyHosts);
 
             Server server = new Server
@@ -76,14 +77,14 @@ namespace BankServer
 
             Console.WriteLine($"Bank Server ({processId}) listening on port {port}");
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
-            Console.WriteLine($"Working with {numberOfProcesses} processes ({bankHosts.Count} banks and {boneyHosts.Count} boneys)");
+            Console.WriteLine($"Working with {bankHosts.Count} banks and {boneyHosts.Count} boneys processes");
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;
             timeSpan += TimeSpan.FromSeconds(5);
 
             // Starts thread in timeSpan
-            SetSlotTimer(timeSpan, slotDuration, serverService);
+            SetSlotTimer(timeSpan, slotDuration * 1000, serverService);
 
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

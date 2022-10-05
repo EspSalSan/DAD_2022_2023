@@ -11,7 +11,6 @@ namespace Utilities
         public string Type { get; }
         public string Address { get; }
 
-        // Constructor
         public BankProcess(int id, string type, string address)
         {
             Id = id;
@@ -62,17 +61,18 @@ namespace Utilities
 
         public static BoneyBankConfig ReadConfig()
         {
+            // Read config file
             string configFilePath = Path.Join(GetSolutionDir(), "PuppetMaster", "config.txt");
             string[] lines = File.ReadAllLines(configFilePath);
-            int numberOfProcesses = 0;
-            List<BankProcess> bankServers = new List<BankProcess>();
-            List<BankProcess> boneyServers = new List<BankProcess>();
+
             int slotDuration = -1;
+            int numberOfProcesses = 0;
             TimeSpan startTime = new TimeSpan();
             Dictionary<int, ProcessState>[] processStates = null;
+            List<BankProcess> bankServers = new List<BankProcess>();
+            List<BankProcess> boneyServers = new List<BankProcess>();
             
-            string pattern = @"(\([^0-9]*\d+[^0-9]*\))";
-            Regex rg = new Regex(pattern);
+            Regex rg = new Regex(@"(\([^0-9]*\d+[^0-9]*\))");
 
             foreach (string line in lines)
             {
@@ -125,7 +125,7 @@ namespace Utilities
                         int processId = int.Parse(values[0].Remove(0, 1));
                         bool frozen = values[1].Equals("F");
                         bool suspected = values[2].Remove(values[2].Length - 1).Equals("S");
-                        processStates[slotId].Add(processId, new ProcessState(frozen, suspected));
+                        processStates[slotId - 1].Add(processId, new ProcessState(frozen, suspected));
                     }
                 }
             }

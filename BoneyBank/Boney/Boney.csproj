@@ -13,11 +13,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-	<Protobuf Include="..\Proto\Boney_Boney.proto" GrpcServices="Both" Link="Protos\Boney_Boney.proto" />
-	<Protobuf Include="..\Proto\BankServer_Boney.proto" GrpcServices="Server" Link="Protos\BankServer_Boney.proto" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <Protobuf Include="..\Proto\Boney_Boney.proto" GrpcServices="Both" Link="Protos\Boney_Boney.proto" />
+    <Protobuf Include="..\Proto\BankServer_Boney.proto" GrpcServices="Server" Link="Protos\BankServer_Boney.proto" />
     <ProjectReference Include="..\Utilities\Utilities.csproj" />
   </ItemGroup>
 

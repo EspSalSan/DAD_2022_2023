@@ -18,12 +18,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-	<Protobuf Include="..\Proto\BankServer_Boney.proto" GrpcServices="Client" Link="Protos\BankServer_Boney.proto" />
-	<Protobuf Include="..\Proto\BankClient_BankServer.proto" GrpcServices="Server" Link="Protos\BankClient_BankServer.proto" />
-	<Protobuf Include="..\Proto\BankServer_BankServer.proto" GrpcServices="Both" Link="Protos\BankServer_BankServer.proto" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <Protobuf Include="..\Proto\BankServer_Boney.proto" GrpcServices="Client" Link="Protos\BankServer_Boney.proto" />
+    <Protobuf Include="..\Proto\BankClient_BankServer.proto" GrpcServices="Server" Link="Protos\BankClient_BankServer.proto" />
+    <Protobuf Include="..\Proto\BankServer_BankServer.proto" GrpcServices="Both" Link="Protos\BankServer_BankServer.proto" />
     <ProjectReference Include="..\Utilities\Utilities.csproj" />
   </ItemGroup>
 

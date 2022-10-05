@@ -92,16 +92,6 @@ namespace PuppetMaster
                     }
                 }
             }
-
-            /*  Tentative de fechar os terminais que não funciona
-            Console.Write("Type something to end all processes.");
-            Console.ReadKey();
-            processList.ForEach(p => {
-                Console.WriteLine("Ending process " + p.Id);
-                p.CloseMainWindow();
-                p.Close();
-            }); 
-            */
         }
     }
 }

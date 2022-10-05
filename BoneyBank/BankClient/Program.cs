@@ -1,10 +1,7 @@
 ﻿using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Utilities;
 
 namespace BankClient
@@ -18,10 +15,17 @@ namespace BankClient
             // Verify arguments
             if (commandArgs.Length != 2)
             {
-                Console.WriteLine("Invalid number of arguments");
+                Console.WriteLine("Invalid number of arguments.");
+                return;
             }
 
-            DepositRequest depositRequest = new DepositRequest { Value = int.Parse(commandArgs[1]) };
+            if (!int.TryParse(commandArgs[1], out int value) || value < 0)
+            {
+                Console.WriteLine("Value must be a positive integer.");
+                return;
+            }
+
+            DepositRequest depositRequest = new DepositRequest { Value = value };
 
             // Send request to all bank processes
             foreach (var entry in bankHosts)
@@ -46,7 +50,13 @@ namespace BankClient
                 Console.WriteLine("Invalid number of arguments");
             }
 
-            WithdrawRequest withdrawRequest = new WithdrawRequest { Value = int.Parse(commandArgs[1]) };
+            if (!int.TryParse(commandArgs[1], out int value) || value < 0)
+            {
+                Console.WriteLine("Value must be a positive integer.");
+                return;
+            }
+
+            WithdrawRequest withdrawRequest = new WithdrawRequest { Value = value };
 
             // Send request to all bank processes
             foreach (var entry in bankHosts)
@@ -68,7 +78,7 @@ namespace BankClient
             // Verify arguments
             if (commandArgs.Length != 1)
             {
-                Console.WriteLine("Invalid number of arguments");
+                Console.WriteLine("Invalid number of arguments.");
             }
 
             ReadRequest readRequest = new ReadRequest { };
@@ -93,9 +103,12 @@ namespace BankClient
         {
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
-            // Initial data
+            // Command Line Arguments
             int processId = int.Parse(args[0]);
+
+            // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
+
             BankHosts bankHosts = config.BankServers.ToDictionary(key => key.Id, value =>
             {
                 GrpcChannel channel = GrpcChannel.ForAddress(value.Address);
@@ -106,8 +119,9 @@ namespace BankClient
 
             while (true) {
 
+                Console.Write("> ");
                 string line = Console.ReadLine();
-                string[] commandArgs = line.Split(" ");
+                string[] commandArgs = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
                 if (commandArgs.Length == 0) { continue; }
 

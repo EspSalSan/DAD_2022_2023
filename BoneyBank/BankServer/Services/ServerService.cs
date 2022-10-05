@@ -10,8 +10,8 @@ namespace BankServer.Services
         private int processId;
         private List<Dictionary<int, bool>> processesSuspectedPerSlot;
         private List<bool> processFrozenPerSlot;
-        private Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts;
-        private Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts;
+        private Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts;
+        private Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts;
 
         // Everything else
         private int currentSlot;
@@ -24,8 +24,8 @@ namespace BankServer.Services
             int processId, 
             List<bool> processFrozenPerSlot, 
             List<Dictionary<int, bool>> processesSuspectedPerSlot,
-            Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts,
-            Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts
+            Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts,
+            Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts
             )
         {
             this.processId = processId;

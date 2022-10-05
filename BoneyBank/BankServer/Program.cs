@@ -45,12 +45,12 @@ namespace BankServer
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
             int numberOfProcesses = config.NumberOfProcesses;
-            Dictionary<string, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(
-                key => key.Id.ToString(), 
+            Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(
+                key => key.Id, 
                 value => new TwoPhaseCommit.TwoPhaseCommitClient(GrpcChannel.ForAddress(value.Address))
             );
-            Dictionary<string, CompareAndSwap.CompareAndSwapClient> boneyHosts = config.BoneyServers.ToDictionary(
-                key => key.Id.ToString(),
+            Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts = config.BoneyServers.ToDictionary(
+                key => key.Id,
                 value => new CompareAndSwap.CompareAndSwapClient(GrpcChannel.ForAddress(value.Address))
             );
             List<Dictionary<int, bool>> processesSuspectedPerSlot = config.ProcessStates.Select(states =>

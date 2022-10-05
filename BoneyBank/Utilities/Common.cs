@@ -5,7 +5,6 @@ using System.Text.RegularExpressions;
 
 namespace Utilities
 {
-    // BankProcess struct with 3 fields (process id, type, and address)
     public struct BankProcess
     {
         public int Id { get; }
@@ -118,7 +117,7 @@ namespace Utilities
                     
                     MatchCollection matched = rg.Matches(line);
                     int slotId = int.Parse(args[1]);
-                    processStates[slotId] = new Dictionary<int, ProcessState>();
+                    processStates[slotId - 1] = new Dictionary<int, ProcessState>();
                     
                     foreach (Match match in matched)
                     {

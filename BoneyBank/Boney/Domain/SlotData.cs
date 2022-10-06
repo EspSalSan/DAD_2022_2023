@@ -7,11 +7,15 @@ namespace Boney.Domain
     public class SlotData
     {
         private int slot;
+        private int compareAndSwapValue;
+
         private bool isPaxosRunning;
+
+        // maybe switch to proposedValue
         private int currentValue;
         private int readTimestamp;
         private int writeTimestamp;
-        private int compareAndSwapValue;
+        
 
         public SlotData(int slot)
         {

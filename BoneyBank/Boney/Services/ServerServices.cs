@@ -129,19 +129,90 @@ namespace Boney.Services
 
                 // Do paxos
 
-                /*
-                 * Vê quem é o lider (menor id que é NS)
-                 * Se ele proprio for o lider, envia propose(slot.CompareAndSwapValue)
-                 * senão ...
-                 * O lider espera pela resposta da maioria
-                 * algoritmo do paxos do qual não me estou a lembrar
-                 * .
-                 * .
-                 * .
-                 * Quando enviar accept e receber resposta de uma maioria responde ao compareAndSwap
-                 */
+
+                // Compute paxos leader (lowest id with NS)
+                // Select new leader
+                Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
+                int leader = int.MaxValue;
+                foreach (KeyValuePair<int, bool> process in processesSuspected)
+                {
+                    // Process that is not suspected and has the lowest id
+                    if (!process.Value && process.Key < leader && this.boneyHosts.ContainsKey(process.Key))
+                    {
+                        leader = process.Key;
+                    }
+                }
+
+                if (leader == int.MaxValue)
+                {
+                    // something went wrong, all processes are frozen
+                    // abort ? stall ?
+                }
+
+                // If self is leader, send prepare(processId)
+
+                if (this.processId != leader)
+                {
+                    // Does nothing and end prepareSlot
+                }
+
+                PrepareRequest prepareRequest = new PrepareRequest
+                {
+                    LeaderId = this.processId
+                };
+
+                List<PromiseReply> promiseResponses = new List<PromiseReply>();
+
+                foreach (var entry in this.boneyHosts)
+                {
+                    try
+                    {
+                        PromiseReply promiseReply = entry.Value.Prepare(prepareRequest);
+                        promiseResponses.Add(promiseReply);
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                }
+
+                // Wait for promise(writeTS, value) from majority
+
+                // Get most recent value from received
+
+                int valueToPropose = 0;
+                int mostRecent = -1;
+                foreach (var response in promiseResponses)
+                {
+                    if(response.ReadTimestamp > mostRecent)
+                    {
+                        mostRecent = response.ReadTimestamp;
+                        valueToPropose = response.Value;
+                    }
+                }
+
+                // If all values are 0, send own value
+
+                // Confirm what value is default (not sure if its zero)
+                if(valueToPropose == 0)
+                {
+                    valueToPropose = request.Invalue;
+                }
+
+                // Send accept(processId, value)
+
+                // Wait for accepted(processId, value) from majority
+
+                // If received, value is accepted
+
 
                 slot.IsPaxosRunning = false;
+
+                return new CompareAndSwapReply
+                {
+                    Slot = request.Slot,
+                    Outvalue = slot.CurrentValue,
+                };
             }
         }
     }

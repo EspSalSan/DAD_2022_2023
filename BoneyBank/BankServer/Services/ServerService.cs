@@ -67,8 +67,6 @@ namespace BankServer.Services
             this.isFrozen = this.processFrozenPerSlot[currentSlot - 1];
 
             // Select new leader
-            // tem bug
-            // neste dicionario estao todos os processos mas ele quer apenas ver os processos do banco (e nao do boney)
             Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
             int leader = int.MaxValue;
             foreach (KeyValuePair<int, bool> process in processesSuspected)

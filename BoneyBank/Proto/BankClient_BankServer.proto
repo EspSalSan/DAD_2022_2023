@@ -6,15 +6,20 @@ service Bank {
   rpc Read      (ReadRequest)			returns (ReadReply);
 }
 
+// TODO: Send bankSequenceNumber in the reply (may be useful)
 message DepositRequest {
-  int32 value = 1;
+	int32 clientId = 1;
+	int32 clientSequenceNumber = 2;
+	int32 value = 3;
 }
 message DepositReply {
-	int32 balance = 2;
+	int32 balance = 1;
 }
 
 message WithdrawRequest {
-  int32 value = 1;
+	int32 clientId = 1;
+	int32 clientSequenceNumber = 2;
+	int32 value = 3;
 }
 message WithdrawReply {
 	int32 value = 1;
@@ -22,7 +27,9 @@ message WithdrawReply {
 }
 
 message ReadRequest {
+	int32 clientId = 1;
+	int32 clientSequenceNumber = 2;
 }
 message ReadReply {
-	int32 balance = 2;
+	int32 balance = 1;
 }

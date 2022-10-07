@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+using static Grpc.Core.Metadata;
 
 namespace BankServer.Services
 {
@@ -54,8 +55,7 @@ namespace BankServer.Services
              */
 
             if(this.currentSlot >= processFrozenPerSlot.Count){
-                Console.WriteLine("No more slots to process.");
-                Console.WriteLine("Aborting...");
+                Console.WriteLine("Slot duration ended but no more slots to process.");
                 return;
             }
 
@@ -80,6 +80,7 @@ namespace BankServer.Services
 
             if(leader == int.MaxValue)
             {
+                Console.WriteLine("No process is valid for leader election.");
                 // something went wrong, all processes are frozen
                 // abort ? stall ?
             }
@@ -87,29 +88,52 @@ namespace BankServer.Services
             // Start Compare and Swap
             CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
             {
-                Invalue = leader,
                 Slot = currentSlot,
+                Invalue = leader,
             };
 
             Console.WriteLine($"Trying to elect process {leader} as leader.");
 
             // Save old leader to know if cleanup is needed
             int oldBankLeader = this.currentBankLeader;
-            // TODO se ele suspeita que um boney está frozen envia pedido à mesma ?
-            // TODO deviamos recolher as respostas todas e confirmar que sao iguais ? (pelo paxos deviam)
-            // Send request to all bank processes
-            foreach (var entry in this.boneyHosts)
+
+            List<Task> tasks = new List<Task>();
+
+            // Send request to all boney processes
+            foreach (var host in this.boneyHosts)
             {
-                try
-                {
-                    CompareAndSwapReply compareAndSwapReply = entry.Value.CompareAndSwap(compareAndSwapRequest);
-                    this.currentBankLeader = compareAndSwapReply.Outvalue;
-                    Console.WriteLine($"Compare and Swap result: {this.currentBankLeader}");
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        CompareAndSwapReply compareAndSwapReply = host.Value.CompareAndSwap(compareAndSwapRequest);
+                        this.currentBankLeader = compareAndSwapReply.Outvalue;
+                        Console.WriteLine($"Compare and Swap result: {this.currentBankLeader}");
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+
+                    return Task.CompletedTask;
+                });
+
+                tasks.Add(t);
+            }
+
+            // Wait for a majority of responses
+            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
+            {
+                int idx = Task.WaitAny(tasks.ToArray());
+                tasks.RemoveAt(idx);
+                Console.WriteLine("One task ended.");
+            }
+
+            Console.WriteLine("Majority ended.");
+
+            foreach (var task in tasks)
+            {
+                Console.WriteLine("Confirm that a majority was awaited");
+                Console.WriteLine($"{task.Id}");
             }
 
             Console.WriteLine($"Process {this.currentBankLeader} is the new leader.");
@@ -157,12 +181,25 @@ namespace BankServer.Services
             lock (this)
             {
                 Console.WriteLine($"Withdraw: {request.Value}");
-                balance -= request.Value;
-                return new WithdrawReply
+
+                if(request.Value > balance)
                 {
-                    Value = request.Value,
-                    Balance = balance
-                };
+                    return new WithdrawReply
+                    {
+                        Value = 0,
+                        Balance = balance
+                    };
+                } 
+                else
+                {
+                    balance -= request.Value;
+                    return new WithdrawReply
+                    {
+                        Value = request.Value,
+                        Balance = balance
+                    };
+                }
+                
             }
         }
 
@@ -192,6 +229,11 @@ namespace BankServer.Services
         /*
          * Two Phase Commit Service (Client/Server) Implementation
          * Communication between BankServer and BankServer
+         * TODO: 
+         * Serve apenas de backup ?
+         * Quando um primario recebe um pedido faz sempre 2PC ?
+         * O secundario responde a algum tipo de pedido ?
+         * 
          */
 
         public TentativeReply Tentative(TentativeRequest request)

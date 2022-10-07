@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Utilities;
 
 namespace BankClient
@@ -18,27 +19,51 @@ namespace BankClient
                 Console.WriteLine("Invalid number of arguments.");
                 return;
             }
-
             if (!int.TryParse(commandArgs[1], out int value) || value < 0)
             {
                 Console.WriteLine("Value must be a positive integer.");
                 return;
             }
 
+            // add clientId and Seq Number
             DepositRequest depositRequest = new DepositRequest { Value = value };
 
+            List<Task> tasks = new List<Task>();
+
             // Send request to all bank processes
-            foreach (var entry in bankHosts)
+            foreach (var host in bankHosts)
             {
-                try
-                {
-                    DepositReply depositReply = entry.Value.Deposit(depositRequest);
-                    Console.WriteLine($"Deposit response: {depositReply.Balance}");
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+               Task t =  Task.Run(() => {
+                   try
+                   {
+                       DepositReply depositReply = host.Value.Deposit(depositRequest);
+                       Console.WriteLine($"Deposit response: {depositReply.Balance}");
+                   }
+                   catch (Grpc.Core.RpcException e)
+                   {
+                       Console.WriteLine(e.Status);
+                   }
+
+                   return Task.CompletedTask;
+               });
+
+               tasks.Add(t);
+            }
+
+            // Wait for a majority of responses
+            // Do clients wait for a majority or just one ?
+            for(int i = 0; i<bankHosts.Count/2+1; i++)
+            {
+                int idx = Task.WaitAny(tasks.ToArray());
+                tasks.RemoveAt(idx);
+                Console.WriteLine("One task ended.");
+            }
+
+            Console.WriteLine("Majority ended.");
+
+            foreach(var task in tasks)
+            {
+                Console.WriteLine($"{task.Id}");
             }
         }
 
@@ -119,7 +144,6 @@ namespace BankClient
 
             while (true) {
 
-                Console.Write("> ");
                 string line = Console.ReadLine();
                 string[] commandArgs = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 

@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace Boney.Domain
 {
@@ -15,6 +13,7 @@ namespace Boney.Domain
         private int currentValue;
         private int readTimestamp;
         private int writeTimestamp;
+        private List<int> decidedReceived;
         
 
         public SlotData(int slot)
@@ -25,6 +24,7 @@ namespace Boney.Domain
             this.readTimestamp = -1;
             this.writeTimestamp = -1;
             this.compareAndSwapValue = 0;
+            this.decidedReceived = new List<int>();
         }
 
         public int Slot { get => slot; set => slot = value; }
@@ -33,6 +33,6 @@ namespace Boney.Domain
         public int ReadTimestamp { get => readTimestamp; set => readTimestamp = value; }
         public int WriteTimestamp { get => writeTimestamp; set => writeTimestamp = value; }
         public int CompareAndSwapValue { get => compareAndSwapValue; set => compareAndSwapValue = value; }
-
+        public List<int> DecidedReceived { get => decidedReceived; set => decidedReceived = value; } 
     }
 }

@@ -77,6 +77,10 @@ namespace PuppetMaster
                 return;
             }
 
+            int m = 5 / 2 + 1;
+            Console.WriteLine($"{m}");
+
+
             List<Process> processList = new List<Process>();
 
             foreach(string line in File.ReadAllLines(configFilePath))

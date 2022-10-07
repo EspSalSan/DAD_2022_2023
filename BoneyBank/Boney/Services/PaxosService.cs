@@ -1,7 +1,4 @@
 ﻿using Grpc.Core;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Boney.Services
@@ -20,9 +17,14 @@ namespace Boney.Services
             return Task.FromResult(serverService.PreparePaxos(request));
         }
 
-        public override Task<AcceptReply> Porpose(PorposeRequest request, ServerCallContext context)
+        public override Task<AcceptedReply> Accept(AcceptRequest request, ServerCallContext context)
         {
-            return Task.FromResult(serverService.PorposePaxos(request));
+            return Task.FromResult(serverService.AcceptPaxos(request));
+        }
+
+        public override Task<DecideReply> Decide(DecideRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(serverService.DecidePaxos(request));
         }
     }
 }

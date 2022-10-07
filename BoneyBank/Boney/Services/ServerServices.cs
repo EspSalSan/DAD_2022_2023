@@ -20,7 +20,7 @@ namespace Boney.Services
         private bool isFrozen;
 
         // Variables that depend on the slot
-        private ConcurrentDictionary<int, SlotData> slots;
+        private ConcurrentDictionary<int, SlotData> slots = new ConcurrentDictionary<int, SlotData>();
 
         public ServerService(
             int processId,

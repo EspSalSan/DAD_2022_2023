@@ -72,10 +72,10 @@ namespace Boney
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;
-            timeSpan += TimeSpan.FromSeconds(5);
+            timeSpan += TimeSpan.FromSeconds(7);
 
             // Starts thread in timeSpan
-            SetSlotTimer(timeSpan, slotDuration, serverService);
+            SetSlotTimer(timeSpan, slotDuration * 1000, serverService);
 
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

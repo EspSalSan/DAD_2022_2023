@@ -13,18 +13,18 @@ namespace Boney.Domain
         private int currentValue;
         private int readTimestamp;
         private int writeTimestamp;
-        private List<int> decidedReceived;
+        private List<(int, int)> decidedReceived;
         
 
         public SlotData(int slot)
         {
             this.slot = slot;
             this.isPaxosRunning = false;
-            this.currentValue = 0;
+            this.currentValue = -1;
             this.readTimestamp = -1;
             this.writeTimestamp = -1;
-            this.compareAndSwapValue = 0;
-            this.decidedReceived = new List<int>();
+            this.compareAndSwapValue = -1;
+            this.decidedReceived = new List<(int, int)>();
         }
 
         public int Slot { get => slot; set => slot = value; }
@@ -33,6 +33,6 @@ namespace Boney.Domain
         public int ReadTimestamp { get => readTimestamp; set => readTimestamp = value; }
         public int WriteTimestamp { get => writeTimestamp; set => writeTimestamp = value; }
         public int CompareAndSwapValue { get => compareAndSwapValue; set => compareAndSwapValue = value; }
-        public List<int> DecidedReceived { get => decidedReceived; set => decidedReceived = value; } 
+        public List<(int, int)> DecidedReceived { get => decidedReceived; set => decidedReceived = value; } 
     }
 }

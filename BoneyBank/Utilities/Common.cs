@@ -121,6 +121,7 @@ namespace Utilities
                     
                     foreach (Match match in matched)
                     {
+                        // TODO: confirmar se estar a ler bem o S/NS
                         string[] values = match.Value.Split(",");
                         int processId = int.Parse(values[0].Remove(0, 1));
                         bool frozen = values[1].Equals("F");

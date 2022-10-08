@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using static Grpc.Core.Metadata;
 
@@ -69,6 +70,7 @@ namespace BankServer.Services
             // Select new leader
             Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
             int leader = int.MaxValue;
+            processesSuspected.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
             foreach (KeyValuePair<int, bool> process in processesSuspected)
             {
                 // Process that is not suspected and has the lowest id

@@ -60,6 +60,11 @@ namespace BankServer
             }).ToList();
             List<bool> processFrozenPerSlot = config.ProcessStates.Select(states => states[processId].Frozen).ToList();
             
+            // A process should not suspect itself
+            foreach ((Dictionary<int, bool> suspected, bool frozen) in processesSuspectedPerSlot.Zip(processFrozenPerSlot, Tuple.Create))
+            {
+                suspected[processId] = frozen;
+            }
 
             ServerService serverService = new ServerService(processId, processFrozenPerSlot, processesSuspectedPerSlot, bankHosts, boneyHosts);
 

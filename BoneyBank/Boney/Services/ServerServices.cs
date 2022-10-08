@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Boney.Services
 {
@@ -77,24 +78,26 @@ namespace Boney.Services
 
             List<PromiseReply> promiseResponses = new List<PromiseReply>();
 
-            // TODO: Use tasks and wait majority
-
+            List<Task> tasks = new List<Task>();
             foreach (var host in this.boneyHosts)
             {
-                try
-                {
-                    PromiseReply promiseReply = host.Value.Prepare(prepareRequest);
-                    promiseResponses.Add(promiseReply);
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        PromiseReply promiseReply = host.Value.Prepare(prepareRequest);
+                        promiseResponses.Add(promiseReply);
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                    return Task.CompletedTask;
+                });
+                tasks.Add(t);
             }
 
-            Console.WriteLine($"Sent {promiseResponses.Count} prepare");
-
-            // Wait for promise(readTS, value) from majority
+            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
 
             return promiseResponses;
         }
@@ -112,21 +115,27 @@ namespace Boney.Services
 
             List<AcceptedReply> acceptResponses = new List<AcceptedReply>();
 
+            List<Task> tasks = new List<Task>();
             foreach (var host in this.boneyHosts)
             {
-                try
-                {
-                    AcceptedReply acceptedReply = host.Value.Accept(acceptRequest);
-                    acceptResponses.Add(acceptedReply);
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        AcceptedReply acceptedReply = host.Value.Accept(acceptRequest);
+                        acceptResponses.Add(acceptedReply);
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                    return Task.CompletedTask;
+                });
+                tasks.Add(t);
             }
 
-            // Wait for accepted(processId, value) from majority
-            Console.WriteLine($"Sent {acceptResponses.Count} accept");
+            // Wait for a majority of responses
+            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
 
             return acceptResponses;
         }
@@ -140,18 +149,24 @@ namespace Boney.Services
                 Value = value
             };
 
+            // Send request to all boney processes
             foreach (var host in this.boneyHosts)
             {
-                try
-                {
-                    DecideReply decideReply = host.Value.Decide(decideRequest);
-                    Console.WriteLine("Ended decide");
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        DecideReply decideReply = host.Value.Decide(decideRequest);
+                        Console.WriteLine("Ended decide");
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                    return Task.CompletedTask;
+                });
             }
+
+            // Don't need to wait for majority
         }
 
         /*

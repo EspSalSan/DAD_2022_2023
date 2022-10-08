@@ -8,6 +8,8 @@ namespace BankServer.Services
 {
     public class ServerService
     {
+        // TODO: Should we create a SlotData just like in Boney ?
+
         // Config file variables
         private readonly int processId;
         private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
@@ -42,10 +44,14 @@ namespace BankServer.Services
             this.balance = 0;
         }
 
+        /*
+         * TODO: Description
+         * Por enquanto não parece precisar de lock
+         * Provavelmente precisa
+         */
         public void PrepareSlot()
         {
             /*
-             * 
              * somehow make process stop processing requeste
              * when the slot ends:
              * if there are requests pending (and is current leader), they go to the next slot
@@ -62,88 +68,45 @@ namespace BankServer.Services
 
             this.currentSlot += 1;
 
-            Console.WriteLine($"Preparing slot {this.currentSlot}");
+            Console.WriteLine($"Preparing slot {this.currentSlot}...");
 
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot - 1];
+            Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
             // Select new leader
-            Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
             int leader = int.MaxValue;
-            processesSuspected.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
-            foreach (KeyValuePair<int, bool> process in processesSuspected)
+            foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[currentSlot - 1])
             {
-                // Process that is not suspected and has the lowest id
+                // Bank process that is not suspected and has the lowest id
                 if(!process.Value && process.Key < leader && this.bankHosts.ContainsKey(process.Key))
-                {
                     leader = process.Key;
-                }
             }
 
             if(leader == int.MaxValue)
             {
                 Console.WriteLine("No process is valid for leader election.");
-                // something went wrong, all processes are frozen
-                // abort ? stall ?
+                // TODO: What to do when all processes are frozen ?
             }
-
-            // Start Compare and Swap
-            CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
-            {
-                Slot = currentSlot,
-                Invalue = leader,
-            };
-
-            Console.WriteLine($"Trying to elect process {leader} as leader.");
 
             // Save old leader to know if cleanup is needed
             int oldBankLeader = this.currentBankLeader;
 
-            List<Task> tasks = new List<Task>();
+            int compareAndSwapReply = SendCompareAndSwapRequest(leader, currentSlot);
 
-            // Send request to all boney processes
-            foreach (var host in this.boneyHosts)
+            if(compareAndSwapReply == -1)
             {
-                Task t = Task.Run(() => {
-                    try
-                    {
-                        CompareAndSwapReply compareAndSwapReply = host.Value.CompareAndSwap(compareAndSwapRequest);
-                        this.currentBankLeader = compareAndSwapReply.Outvalue;
-                        Console.WriteLine($"Compare and Swap result: {this.currentBankLeader}");
-                    }
-                    catch (Grpc.Core.RpcException e)
-                    {
-                        Console.WriteLine(e.Status);
-                    }
-
-                    return Task.CompletedTask;
-                });
-
-                tasks.Add(t);
+                // TODO: something went wrong at the compare and swap service
             }
 
-            // Wait for a majority of responses
-            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
-            {
-                int idx = Task.WaitAny(tasks.ToArray());
-                tasks.RemoveAt(idx);
-                Console.WriteLine("One task ended.");
-            }
-
-            Console.WriteLine("Majority ended.");
-
-            foreach (var task in tasks)
-            {
-                Console.WriteLine("Confirm that a majority was awaited");
-                Console.WriteLine($"{task.Id}");
-            }
+            this.currentBankLeader = compareAndSwapReply;
 
             Console.WriteLine($"Process {this.currentBankLeader} is the new leader.");
 
-            // Start Cleanup (if necessary)
             if(this.currentBankLeader != oldBankLeader && this.currentBankLeader == this.processId)
             {
-                // DO CLEANUP
+                Console.WriteLine("Leader has changed, starting cleanup...");
+                // TODO: Cleanup
             }
 
 
@@ -178,58 +141,45 @@ namespace BankServer.Services
          * Communication between BankClient and BankServer
          */
 
-        public WithdrawReply WithdrawMoney(WithdrawRequest request)
-        {
-            lock (this)
-            {
-                Console.WriteLine($"Withdraw: {request.Value}");
-
-                if(request.Value > balance)
-                {
-                    return new WithdrawReply
-                    {
-                        Value = 0,
-                        Balance = balance
-                    };
-                } 
-                else
-                {
-                    balance -= request.Value;
-                    return new WithdrawReply
-                    {
-                        Value = request.Value,
-                        Balance = balance
-                    };
-                }
-                
-            }
-        }
-
         public DepositReply DepositMoney(DepositRequest request)
         {
             lock (this)
             {
-                Console.WriteLine($"Deposit: {request.Value}");
-                balance += request.Value;
+                Console.WriteLine($"Deposit request ({request.Value}) from {request.ClientId}");
                 return new DepositReply
                 {
-                    Balance = balance
+                    Balance = this.balance += request.Value,
+                    Primary = this.currentBankLeader == this.processId,
                 };
+            }
+        }
+
+        public WithdrawReply WithdrawMoney(WithdrawRequest request)
+        {
+            lock (this)
+            {
+                Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
+                return new WithdrawReply
+                {
+                    Value = request.Value > this.balance ? 0 : (this.balance -= request.Value),
+                    Balance = this.balance,
+                    Primary = this.currentBankLeader == this.processId,
+                }; 
             }
         }
 
         public ReadReply ReadBalance(ReadRequest request)
         {
-            // lock for read?
-            Console.WriteLine($"Read: {balance}");
+            Console.WriteLine($"Read request from {request.ClientId}");
             return new ReadReply
             {
-                Balance = balance
+                Balance = balance,
+                Primary = this.currentBankLeader == this.processId,
             };
         }
 
         /*
-         * Two Phase Commit Service (Client/Server) Implementation
+         * Two Phase Commit Service (Server) Implementation
          * Communication between BankServer and BankServer
          * TODO: 
          * Serve apenas de backup ?
@@ -257,7 +207,12 @@ namespace BankServer.Services
         }
 
         /*
-         * Cleanup Service (Client/Server) Implementation
+         * Two Phase Commit Service (Client) Implementation
+         * Communication between BankServer and BankServer
+         */
+
+        /*
+         * Cleanup Service (Server) Implementation
          * Communication between BankServer and BankServer
          */
 
@@ -271,11 +226,52 @@ namespace BankServer.Services
         }
 
         /*
+         * Cleanup Service (Client) Implementation
+         * Communication between BankServer and BankServer
+         */
+
+        /*
          * Compare And Swap Service (Client) Implementation
          * Communication between BankServer and BankServer
          */
 
-        
+        public int SendCompareAndSwapRequest(int leader, int currentSlot)
+        {
+            int compareAndSwapReplyValue = -1;
 
+            CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
+            {
+                Slot = currentSlot,
+                Invalue = leader,
+            };
+
+            Console.WriteLine($"Trying to elect process {leader} as leader.");
+
+            // Send request to all boney processes
+            List<Task> tasks = new List<Task>();
+            foreach (var host in this.boneyHosts)
+            {
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        CompareAndSwapReply compareAndSwapReply = host.Value.CompareAndSwap(compareAndSwapRequest);
+                        compareAndSwapReplyValue = compareAndSwapReply.Outvalue;
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+
+                    return Task.CompletedTask;
+                });
+                tasks.Add(t);
+            }
+
+            // Wait for a majority of responses
+            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+
+            return compareAndSwapReplyValue;
+        }
     }
 }

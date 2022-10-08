@@ -29,11 +29,6 @@ namespace BankServer
 
         static void Main(string[] args)
         {
-            /* TODO
-             * Onde guardar as funcoes de cliente ? (sendo que as funcoes de servidor ja estao no Services/
-             * Talvez criar uma biblioteca para guardar as funcoes de ler a config
-             */
-
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
             
             // Command Line Arguments
@@ -59,12 +54,10 @@ namespace BankServer
                 return states.ToDictionary(key => key.Key, value => value.Value.Suspected);
             }).ToList();
             List<bool> processFrozenPerSlot = config.ProcessStates.Select(states => states[processId].Frozen).ToList();
-            
-            // A process should not suspect itself
-            foreach ((Dictionary<int, bool> suspected, bool frozen) in processesSuspectedPerSlot.Zip(processFrozenPerSlot, Tuple.Create))
-            {
-                suspected[processId] = frozen;
-            }
+
+            // A process should not suspect itself (it knows if its frozen or not)
+            for (int i = 0; i < processesSuspectedPerSlot.Count; i++)
+                processesSuspectedPerSlot[i][processId] = processFrozenPerSlot[i];
 
             ServerService serverService = new ServerService(processId, processFrozenPerSlot, processesSuspectedPerSlot, bankHosts, boneyHosts);
 
@@ -81,7 +74,7 @@ namespace BankServer
 
             Console.WriteLine($"Bank Server ({processId}) listening on port {port}");
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
-            Console.WriteLine($"Working with {bankHosts.Count} banks and {boneyHosts.Count} boneys processes");
+            Console.WriteLine($"Working with {bankHosts.Count} banks and {boneyHosts.Count} boney processes");
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;

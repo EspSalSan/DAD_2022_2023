@@ -14,6 +14,7 @@ message DepositRequest {
 }
 message DepositReply {
 	int32 balance = 1;
+	bool primary = 2;
 }
 
 message WithdrawRequest {
@@ -24,6 +25,7 @@ message WithdrawRequest {
 message WithdrawReply {
 	int32 value = 1;
 	int32 balance = 2;
+	bool primary = 3;
 }
 
 message ReadRequest {
@@ -32,4 +34,5 @@ message ReadRequest {
 }
 message ReadReply {
 	int32 balance = 1;
+	bool primary = 2;
 }

@@ -2,16 +2,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Utilities;
 
 namespace BankClient
 {
+    using static Grpc.Core.Metadata;
     using BankHosts = Dictionary<int, Bank.BankClient>;
 
     internal class Program
     {
-        static void SendDepositRequest(string[] commandArgs, BankHosts bankHosts)
+        static void SendDepositRequest(int processId, int clientSequenceNumber, string[] commandArgs, BankHosts bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 2)
@@ -25,19 +27,27 @@ namespace BankClient
                 return;
             }
 
-            // add clientId and Seq Number
-            DepositRequest depositRequest = new DepositRequest { Value = value };
+            clientSequenceNumber++;
 
-            List<Task> tasks = new List<Task>();
+            DepositRequest depositRequest = new DepositRequest 
+            { 
+                ClientId = processId,
+                ClientSequenceNumber = clientSequenceNumber,
+                Value = value,
+            };
 
             // Send request to all bank processes
+            List<Task> tasks = new List<Task>();
             foreach (var host in bankHosts)
             {
                Task t =  Task.Run(() => {
                    try
                    {
                        DepositReply depositReply = host.Value.Deposit(depositRequest);
-                       Console.WriteLine($"Deposit response: {depositReply.Balance}");
+                       Console.WriteLine(
+                           $"Balance {depositReply.Balance} ({(depositReply.Primary ? "primary" : "secondary")})"
+                       );
+
                    }
                    catch (Grpc.Core.RpcException e)
                    {
@@ -50,55 +60,59 @@ namespace BankClient
                tasks.Add(t);
             }
 
-            // Wait for a majority of responses
-            // Do clients wait for a majority or just one ?
-            for(int i = 0; i<bankHosts.Count/2+1; i++)
-            {
-                int idx = Task.WaitAny(tasks.ToArray());
-                tasks.RemoveAt(idx);
-                Console.WriteLine("One task ended.");
-            }
-
-            Console.WriteLine("Majority ended.");
-
-            foreach(var task in tasks)
-            {
-                Console.WriteLine($"{task.Id}");
-            }
+            // Clients wait for only one response
+            Task.WaitAny(tasks.ToArray());
         }
 
-        static void SendWithdrawRequest(string[] commandArgs, BankHosts bankHosts)
+        static void SendWithdrawRequest(int processId, int clientSequenceNumber, string[] commandArgs, BankHosts bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 2)
             {
                 Console.WriteLine("Invalid number of arguments");
             }
-
             if (!int.TryParse(commandArgs[1], out int value) || value < 0)
             {
                 Console.WriteLine("Value must be a positive integer.");
                 return;
             }
 
-            WithdrawRequest withdrawRequest = new WithdrawRequest { Value = value };
+            clientSequenceNumber++;
+
+            WithdrawRequest withdrawRequest = new WithdrawRequest {
+                ClientId = processId,
+                ClientSequenceNumber = clientSequenceNumber,
+                Value = value 
+            };
 
             // Send request to all bank processes
-            foreach (var entry in bankHosts)
+            List<Task> tasks = new List<Task>();
+            foreach (var host in bankHosts)
             {
-                try
-                {
-                    WithdrawReply withdrawReply = entry.Value.Withdraw(withdrawRequest);
-                    Console.WriteLine($"Withdraw response: {withdrawReply.Balance}");
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        WithdrawReply withdrawReply = host.Value.Withdraw(withdrawRequest);
+                        Console.WriteLine(
+                           $"Withdrew {withdrawReply.Value} | Balance {withdrawReply.Balance} ({(withdrawReply.Primary ? "primary" : "secondary")})"
+                        );
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+
+                    return Task.CompletedTask;
+                });
+
+                tasks.Add(t);
             }
+
+            // Clients wait for only one response
+            Task.WaitAny(tasks.ToArray());
         }
 
-        static void SendReadBalanceRequest(string[] commandArgs, BankHosts bankHosts)
+        static void SendReadBalanceRequest(int processId, int clientSequenceNumber, string[] commandArgs, BankHosts bankHosts)
         {
             // Verify arguments
             if (commandArgs.Length != 1)
@@ -106,21 +120,36 @@ namespace BankClient
                 Console.WriteLine("Invalid number of arguments.");
             }
 
-            ReadRequest readRequest = new ReadRequest { };
+            ReadRequest readRequest = new ReadRequest {
+                ClientId = processId,
+                ClientSequenceNumber = clientSequenceNumber,
+            };
 
             // Send request to all bank processes
-            foreach (var entry in bankHosts)
+            List<Task> tasks = new List<Task>();
+            foreach (var host in bankHosts)
             {
-                try
-                {
-                    ReadReply readReply = entry.Value.Read(readRequest);
-                    Console.WriteLine($"Read balance response: {readReply.Balance}");
-                }
-                catch (Grpc.Core.RpcException e)
-                {
-                    Console.WriteLine(e.Status);
-                }
+                Task t = Task.Run(() => {
+                    try
+                    {
+                        ReadReply readReply = host.Value.Read(readRequest);
+                        Console.WriteLine(
+                           $"Balance {readReply.Balance} ({(readReply.Primary ? "primary" : "secondary")})"
+                        );
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+
+                    return Task.CompletedTask;
+                });
+
+                tasks.Add(t);
             }
+
+            // Clients wait for only one response
+            Task.WaitAny(tasks.ToArray());
         }
 
 
@@ -140,7 +169,9 @@ namespace BankClient
                 return new Bank.BankClient(channel);
             });
 
-            Console.WriteLine($"Bank Client ({processId}) starting...");
+            int clientSequenceNumber = 0;
+
+            Console.WriteLine($"Bank Client ({processId})");
 
             while (true) {
 
@@ -152,15 +183,15 @@ namespace BankClient
                 switch (commandArgs[0])
                 {
                     case "D":
-                        SendDepositRequest(commandArgs, bankHosts);
+                        SendDepositRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     case "W":
-                        SendWithdrawRequest(commandArgs, bankHosts);
+                        SendWithdrawRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     case "R":
-                        SendReadBalanceRequest(commandArgs, bankHosts);
+                        SendReadBalanceRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     default:

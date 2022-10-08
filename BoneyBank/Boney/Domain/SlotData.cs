@@ -15,7 +15,6 @@ namespace Boney.Domain
         private int writeTimestamp;
         private List<(int, int)> decidedReceived;
         
-
         public SlotData(int slot)
         {
             this.slot = slot;

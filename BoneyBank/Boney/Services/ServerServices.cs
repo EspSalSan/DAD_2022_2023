@@ -1,11 +1,7 @@
 ﻿using Boney.Domain;
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
 
 namespace Boney.Services
 {
@@ -41,7 +37,7 @@ namespace Boney.Services
         }
 
         /*
-         * At the beginning of each slot, change configs
+         * TODO: Description
          */
         public void PrepareSlot()
         {
@@ -67,7 +63,99 @@ namespace Boney.Services
         }
 
         /*
-        * Paxos Service (Client/Server) Implementation
+        * Paxos Service (Client) Implementation
+        * Communication between Boney and Boney
+        */
+
+        public List<PromiseReply> SendPrepareRequest()
+        {
+            PrepareRequest prepareRequest = new PrepareRequest
+            {
+                Slot = this.currentSlot,
+                LeaderId = this.processId
+            };
+
+            List<PromiseReply> promiseResponses = new List<PromiseReply>();
+
+            // TODO: Use tasks and wait majority
+
+            foreach (var host in this.boneyHosts)
+            {
+                try
+                {
+                    PromiseReply promiseReply = host.Value.Prepare(prepareRequest);
+                    promiseResponses.Add(promiseReply);
+                }
+                catch (Grpc.Core.RpcException e)
+                {
+                    Console.WriteLine(e.Status);
+                }
+            }
+
+            Console.WriteLine($"Sent {promiseResponses.Count} prepare");
+
+            // Wait for promise(readTS, value) from majority
+
+            return promiseResponses;
+        }
+
+        public List<AcceptedReply> SendAcceptRequest(int value)
+        {
+            Console.WriteLine("Sending accept");
+
+            AcceptRequest acceptRequest = new AcceptRequest
+            {
+                Slot = this.currentSlot,
+                LeaderId = this.processId,
+                Value = value,
+            };
+
+            List<AcceptedReply> acceptResponses = new List<AcceptedReply>();
+
+            foreach (var host in this.boneyHosts)
+            {
+                try
+                {
+                    AcceptedReply acceptedReply = host.Value.Accept(acceptRequest);
+                    acceptResponses.Add(acceptedReply);
+                }
+                catch (Grpc.Core.RpcException e)
+                {
+                    Console.WriteLine(e.Status);
+                }
+            }
+
+            // Wait for accepted(processId, value) from majority
+            Console.WriteLine($"Sent {acceptResponses.Count} accept");
+
+            return acceptResponses;
+        }
+
+        public void SendDecideRequest(int writeTimestamp, int value)
+        {
+            DecideRequest decideRequest = new DecideRequest
+            {
+                Slot = this.currentSlot,
+                WriteTimestamp = writeTimestamp,
+                Value = value
+            };
+
+            foreach (var host in this.boneyHosts)
+            {
+                try
+                {
+                    DecideReply decideReply = host.Value.Decide(decideRequest);
+                    Console.WriteLine("Ended decide");
+                }
+                catch (Grpc.Core.RpcException e)
+                {
+                    Console.WriteLine(e.Status);
+                }
+            }
+        }
+
+        /*
+        * Paxos Service (Server) Implementation
         * Communication between Boney and Boney
         */
 
@@ -96,6 +184,11 @@ namespace Boney.Services
 
         public AcceptedReply AcceptPaxos(AcceptRequest request)
         {
+            while (!this.slots.ContainsKey(request.Slot))
+            {
+                // wait for slot to be created
+            }
+
             SlotData slot = this.slots[request.Slot];
 
             Console.WriteLine($"Accept request from {request.LeaderId} in slot {request.Slot}");
@@ -106,26 +199,7 @@ namespace Boney.Services
                 slot.CompareAndSwapValue = request.Value;
 
                 // Acceptors send the information to Learners
-
-                DecideRequest decideRequest = new DecideRequest
-                {
-                    Slot = this.currentSlot,
-                    WriteTimestamp = slot.WriteTimestamp,
-                    Value = request.Value
-                };
-
-                foreach (var host in this.boneyHosts)
-                {
-                    try
-                    {
-                        DecideReply decideReply = host.Value.Decide(decideRequest);
-                        Console.WriteLine("Ended decide");
-                    }
-                    catch (Grpc.Core.RpcException e)
-                    {
-                        Console.WriteLine(e.Status);
-                    }
-                }
+                SendDecideRequest(slot.WriteTimestamp, request.Value);
             }
 
             return new AcceptedReply
@@ -139,17 +213,20 @@ namespace Boney.Services
 
         public DecideReply DecidePaxos(DecideRequest request)
         {
+            while (!this.slots.ContainsKey(request.Slot))
+            {
+                // wait for slot to be created
+            }
+
             SlotData slot = this.slots[request.Slot];
 
             Console.WriteLine($"Decide request in slot {request.Slot} ");
 
             lock (slot)
             {
-                // Array de ids
                 slot.DecidedReceived.Add((request.WriteTimestamp, request.Value));
 
                 int majority = this.boneyHosts.Count / 2 + 1;
-                Console.WriteLine($"{majority}");
 
                 Dictionary<(int,int), int> received = new Dictionary<(int,int), int>();
                 foreach(var entry in slot.DecidedReceived)
@@ -177,9 +254,6 @@ namespace Boney.Services
                 // USEFULL TO PRINT DICTIONARIES
                 //received.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
 
-                Console.WriteLine($"paxos is running ?{slot.IsPaxosRunning}");
-
-
                 return new DecideReply
                 {
                     // empty ?
@@ -192,44 +266,47 @@ namespace Boney.Services
          * Communication between Bank and Boney
          */
 
+        public CompareAndSwapReply WaitForPaxosToEnd(SlotData slot, CompareAndSwapRequest request)
+        {
+            Console.WriteLine("Waiting for paxos to end.");
+            while (slot.IsPaxosRunning)
+            {
+                // wait for paxos to end
+            }
+
+            Console.WriteLine($"Paxos ended with value {slot.CurrentValue}");
+
+            return new CompareAndSwapReply
+            {
+                Slot = request.Slot,
+                Outvalue = slot.CurrentValue,
+            };
+        }
+
         public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
         {
             lock (this)
             {
-                // Variables depend on the slot to prevent confusion
-                // if multiple paxos are running for different slots
-                if (!this.slots.ContainsKey(request.Slot))
+                while (!this.slots.ContainsKey(request.Slot))
                 {
-                    Console.WriteLine("AAAAAAAAAAAAAAAAAAA VAI DAR MERDA");
+                    // wait for slot to be created
                 }
+
                 SlotData slot = this.slots[request.Slot];
 
-                Console.WriteLine($"Received compare and swap request with {request.Invalue} value in slot {request.Slot}");
+                Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
                 // needs better names
                 // CompareAndSwapValue -> valor que foi trocado pelo banco
                 // CurrentValue -> Valor que foi decido pelo paxos
                 if (slot.CompareAndSwapValue == -1 && slot.CurrentValue == -1)
                 {
-                    Console.WriteLine("First compare and swap");
                     slot.CompareAndSwapValue = request.Invalue;
                     slot.IsPaxosRunning = true;
                 }
-                else // compareAndSwapValue is set which means paxos might be running (or not)
+                else
                 {
-                    Console.WriteLine("Waiting for paxos to end.");
-                    while (slot.IsPaxosRunning)
-                    {
-                        // wait for paxos to end
-                    }
-
-                    Console.WriteLine($"Paxos ended, sending {slot.CurrentValue}");
-
-                    return new CompareAndSwapReply
-                    {
-                        Slot = request.Slot,
-                        Outvalue = slot.CurrentValue,
-                    };
+                    return WaitForPaxosToEnd(slot, request);
                 }
 
                 // Do paxos
@@ -243,88 +320,34 @@ namespace Boney.Services
                 {
                     // Process that is not suspected and has the lowest id
                     if (!process.Value && process.Key < leader && this.boneyHosts.ContainsKey(process.Key))
-                    {
                         leader = process.Key;
-                    }
                 }
 
                 if (leader == int.MaxValue)
                 {
-                    // something went wrong, all processes are frozen
-                    // abort ? stall ?
+                    // TODO: All processes are frozen, what to do ?
                 }
 
-                Console.WriteLine($"Paxos Leader is {leader} and I'm {this.processId}");
-
-                // If self is leader, send prepare(processId)
+                Console.WriteLine($"I'm {this.processId} and Paxos Leader is {leader}");
 
                 if (this.processId != leader)
                 {
-                    while (slot.IsPaxosRunning)
-                    {
-                        // wait for paxos to end
-                    }
-
-                    Console.WriteLine($"Paxos ended, sending {slot.CurrentValue}");
-
-                    return new CompareAndSwapReply
-                    {
-                        Slot = request.Slot,
-                        Outvalue = slot.CurrentValue,
-                    };
+                    return WaitForPaxosToEnd(slot, request);
                 }
 
-                Console.WriteLine("Sending prepare");
+                // Send prepare to all acceptors
+                List<PromiseReply> promiseResponses = SendPrepareRequest();
 
-                PrepareRequest prepareRequest = new PrepareRequest
-                {
-                    Slot = this.currentSlot,
-                    LeaderId = this.processId
-                };
-
-                List<PromiseReply> promiseResponses = new List<PromiseReply>();
-
-                foreach (var host in this.boneyHosts)
-                {
-                    try
-                    {
-                        PromiseReply promiseReply = host.Value.Prepare(prepareRequest);
-                        promiseResponses.Add(promiseReply);
-                    }
-                    catch (Grpc.Core.RpcException e)
-                    {
-                        Console.WriteLine(e.Status);
-                    }
-                }
-
-                Console.WriteLine($"Sent {promiseResponses.Count} prepare");
-
-                // Wait for promise(readTS, value) from majority
-
-                // If another leader is running, wait for him to finish paxos
+                // Stop being leader if there is a more recent one
                 foreach (var response in promiseResponses)
                 {
                     if(response.ReadTimestamp > slot.ReadTimestamp)
-                    {
-                        while (slot.IsPaxosRunning)
-                        {
-                            // wait for paxos to end
-                        }
-
-                        Console.WriteLine($"Paxos ended, sending {slot.CurrentValue}");
-
-                        return new CompareAndSwapReply
-                        {
-                            Slot = request.Slot,
-                            Outvalue = slot.CurrentValue,
-                        };
-                    }
+                        return WaitForPaxosToEnd(slot, request);
                 }
 
-                // Get most recent value from received
-
-                int valueToPropose = -1;
+                // Get values from promises
                 int mostRecent = -1;
+                int valueToPropose = -1;
                 foreach (var response in promiseResponses)
                 {
                     if(response.ReadTimestamp > mostRecent)
@@ -334,77 +357,15 @@ namespace Boney.Services
                     }
                 }
 
-                // If all values are 0, send own value
-
-                // Confirm what value is default (not sure if its zero)
+                // If acceptors have no value, send own value
                 if(valueToPropose == -1)
-                {
                     valueToPropose = slot.CompareAndSwapValue;
-                }
 
-                // Send accept(processId, value)
+                // Send accept to all acceptors which will send decide to learners
+                List<AcceptedReply> acceptResponses = SendAcceptRequest(valueToPropose);
 
-                Console.WriteLine("Sending accept");
-
-                AcceptRequest acceptRequest = new AcceptRequest
-                {
-                    Slot = this.currentSlot,
-                    LeaderId = this.processId,
-                    Value = valueToPropose
-                };
-                
-                List<AcceptedReply> acceptResponses = new List<AcceptedReply>();
-
-                foreach (var host in this.boneyHosts)
-                {
-                    try
-                    {
-                        AcceptedReply acceptedReply = host.Value.Accept(acceptRequest);
-                        acceptResponses.Add(acceptedReply);
-                    }
-                    catch (Grpc.Core.RpcException e)
-                    {
-                        Console.WriteLine(e.Status);
-                    }
-                }
-
-                // Wait for accepted(processId, value) from majority
-                Console.WriteLine($"Sent {acceptResponses.Count} accept");
-
-                // If another leader is running, wait for him to finish paxos
-                foreach (var response in acceptResponses)
-                {
-                    if (response.WriteTimestamp > slot.WriteTimestamp)
-                    {
-                        while (slot.IsPaxosRunning)
-                        {
-                            // wait for paxos to end
-                        }
-
-                        Console.WriteLine($"Paxos ended, sending {slot.CurrentValue}");
-
-                        return new CompareAndSwapReply
-                        {
-                            Slot = request.Slot,
-                            Outvalue = slot.CurrentValue,
-                        };
-                    }
-                }
-
-                // Wait for learners to reach consensus
-
-                while (slot.IsPaxosRunning)
-                {
-                    // wait for paxos to end
-                }
-
-                Console.WriteLine($"Paxos ended, sending {slot.CurrentValue}");
-
-                return new CompareAndSwapReply
-                {
-                    Slot = request.Slot,
-                    Outvalue = slot.CurrentValue,
-                };
+                // Wait for learners to decide
+                return WaitForPaxosToEnd(slot, request);
             }
         }
     }

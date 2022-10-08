@@ -52,12 +52,10 @@ namespace Boney
                 return states.ToDictionary(key => key.Key, value => value.Value.Suspected);
             }).ToList();
             List<bool> processFrozenPerSlot = config.ProcessStates.Select(states => states[processId].Frozen).ToList();
-            
-            // A process should not suspect itself
-            foreach ((Dictionary<int, bool> suspected, bool frozen) in processesSuspectedPerSlot.Zip(processFrozenPerSlot, Tuple.Create))
-            {
-                suspected[processId] = frozen;
-            }
+
+            // A process should not suspect itself (it knows if its frozen or not)
+            for (int i = 0; i < processesSuspectedPerSlot.Count; i++)
+                processesSuspectedPerSlot[i][processId] = processFrozenPerSlot[i];
 
             ServerService serverService = new ServerService(processId, processFrozenPerSlot, processesSuspectedPerSlot, boneyHosts);
 
@@ -74,7 +72,7 @@ namespace Boney
 
             Console.WriteLine($"Boney ({processId}) listening on port {port}");
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
-            Console.WriteLine($"Working with {numberOfProcesses} processes ({boneyHosts.Count} boneys)");
+            Console.WriteLine($"Working with {boneyHosts.Count} boney processes)");
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;

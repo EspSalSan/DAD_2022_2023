@@ -118,14 +118,14 @@ namespace Utilities
                     MatchCollection matched = rg.Matches(line);
                     int slotId = int.Parse(args[1]);
                     processStates[slotId - 1] = new Dictionary<int, ProcessState>();
-                    
+
                     foreach (Match match in matched)
                     {
                         // TODO: confirmar se estar a ler bem o S/NS
                         string[] values = match.Value.Split(",");
                         int processId = int.Parse(values[0].Remove(0, 1));
                         bool frozen = values[1].Equals("F");
-                        bool suspected = values[2].Remove(values[2].Length - 1).Equals("S");
+                        bool suspected = values[2].Remove(values[2].Length - 1) == " S";
                         processStates[slotId - 1].Add(processId, new ProcessState(frozen, suspected));
                     }
                 }

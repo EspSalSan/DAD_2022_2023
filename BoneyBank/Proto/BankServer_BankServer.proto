@@ -5,21 +5,34 @@ service TwoPhaseCommit {
 	rpc Commit(CommitRequest) returns (CommitReply);
 }
 
-// rever o que é preciso enviar em cada mensagem
+// TODO: Do we need to send this ?
+// Secondary bank processes must update their balancce somehow
+enum ClientAction {
+	DEPOSIT = 0;
+	WITHDRAW = 1;
+	READ = 2;
+}
+message ClientRequest {
+	ClientAction action = 1;
+	int32 value = 2;
+}
+
 message TentativeRequest {
 	int32 processId = 1;
-	int32 sequenceNumber = 2;
+	int32 slot = 2;
+	int32 sequenceNumber = 3;
 }
 message TentativeReply {
-	bool success = 1;
+	bool acknowledge = 1;
 }
 
 message CommitRequest {
 	int32 processId = 1;
-	int32 sequenceNumber = 2;
+	int32 slot = 2;
+	int32 sequenceNumber = 3;
+	ClientRequest request = 4;
 }
 message CommitReply {
-	bool success = 1;
 }
 
 service Cleanup {

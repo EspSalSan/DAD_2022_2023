@@ -76,7 +76,7 @@ namespace Boney
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;
-            timeSpan += TimeSpan.FromSeconds(7-processId);
+            timeSpan += TimeSpan.FromSeconds(5);
 
             // Starts thread in timeSpan
             SetSlotTimer(timeSpan, slotDuration * 1000, serverService);

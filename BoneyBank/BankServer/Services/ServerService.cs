@@ -19,14 +19,16 @@ namespace BankServer.Services
 
         // Changing variables
         private int currentSlot;
-        private int currentBankLeader;
+        private int primaryBankProcess;
         private bool isFrozen;
         private int balance;
-        private Dictionary<int, int> lastKnownSequenceNumber;
+        // private Dictionary<int, int> lastKnownSequenceNumber;
+        private int currentSequenceNumber;
+        private List<int> primaryPerSlot;
 
         public ServerService(
-            int processId, 
-            List<bool> processFrozenPerSlot, 
+            int processId,
+            List<bool> processFrozenPerSlot,
             List<Dictionary<int, bool>> processesSuspectedPerSlot,
             Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts,
             Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts
@@ -39,9 +41,11 @@ namespace BankServer.Services
             this.boneyHosts = boneyHosts;
 
             this.currentSlot = 0;
-            this.currentBankLeader = 0;
+            this.primaryBankProcess = 0;
             this.isFrozen = false;
             this.balance = 0;
+            this.currentSequenceNumber = 0;
+            this.primaryPerSlot = new List<int>();
         }
 
         /*
@@ -61,7 +65,8 @@ namespace BankServer.Services
              * (maybe) send them to the listOfPending (if the leader is another)
              */
 
-            if(this.currentSlot >= processFrozenPerSlot.Count){
+            if (this.currentSlot >= processFrozenPerSlot.Count)
+            {
                 Console.WriteLine("Slot duration ended but no more slots to process.");
                 return;
             }
@@ -79,31 +84,32 @@ namespace BankServer.Services
             foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[currentSlot - 1])
             {
                 // Bank process that is not suspected and has the lowest id
-                if(!process.Value && process.Key < leader && this.bankHosts.ContainsKey(process.Key))
+                if (!process.Value && process.Key < leader && this.bankHosts.ContainsKey(process.Key))
                     leader = process.Key;
             }
 
-            if(leader == int.MaxValue)
+            if (leader == int.MaxValue)
             {
                 Console.WriteLine("No process is valid for leader election.");
                 // TODO: What to do when all processes are frozen ?
             }
 
             // Save old leader to know if cleanup is needed
-            int oldBankLeader = this.currentBankLeader;
+            int primaryBankProcess = this.primaryBankProcess;
 
             int compareAndSwapReply = SendCompareAndSwapRequest(leader, currentSlot);
 
-            if(compareAndSwapReply == -1)
+            if (compareAndSwapReply == -1)
             {
                 // TODO: something went wrong at the compare and swap service
             }
 
-            this.currentBankLeader = compareAndSwapReply;
+            this.primaryBankProcess = compareAndSwapReply;
+            this.primaryPerSlot.Add(this.primaryBankProcess);
 
-            Console.WriteLine($"Process {this.currentBankLeader} is the new leader.");
+            Console.WriteLine($"Process {this.primaryBankProcess} is the new leader.");
 
-            if(this.currentBankLeader != oldBankLeader && this.currentBankLeader == this.processId)
+            if (this.primaryBankProcess != primaryBankProcess && this.primaryBankProcess == this.processId)
             {
                 Console.WriteLine("Leader has changed, starting cleanup...");
                 // TODO: Cleanup
@@ -139,42 +145,86 @@ namespace BankServer.Services
         /*
          * Bank Service (Server) Implementation
          * Communication between BankClient and BankServer
+         * TODO: Do they need locks?
          */
 
         public DepositReply DepositMoney(DepositRequest request)
         {
+            Console.WriteLine($"Deposit request ({request.Value}) from {request.ClientId}");
+
+            if (this.processId == this.primaryBankProcess)
+            {
+                Start2PC(ref request);
+            }
+
             lock (this)
             {
-                Console.WriteLine($"Deposit request ({request.Value}) from {request.ClientId}");
-                return new DepositReply
+                if (this.processId == this.primaryBankProcess)
                 {
-                    Balance = this.balance += request.Value,
-                    Primary = this.currentBankLeader == this.processId,
-                };
+                    return new DepositReply
+                    {
+                        Balance = this.balance += request.Value,
+                        Primary = this.primaryBankProcess == this.processId,
+                    };
+                }
+                else
+                {
+                    return new DepositReply
+                    {
+                        Balance = this.balance,
+                        Primary = this.primaryBankProcess == this.processId,
+                    };
+                }
+
             }
+
         }
 
         public WithdrawReply WithdrawMoney(WithdrawRequest request)
         {
+            Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
+
+            if (this.processId == this.primaryBankProcess)
+            {
+                Start2PC(ref request);
+            }
+
             lock (this)
             {
-                Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
-                return new WithdrawReply
+                if (this.processId == this.primaryBankProcess)
                 {
-                    Value = request.Value > this.balance ? 0 : (this.balance -= request.Value),
-                    Balance = this.balance,
-                    Primary = this.currentBankLeader == this.processId,
-                }; 
+                    return new WithdrawReply
+                    {
+                        Value = request.Value > this.balance ? 0 : (this.balance -= request.Value),
+                        Balance = this.balance,
+                        Primary = this.primaryBankProcess == this.processId,
+                    };
+                }
+                else
+                {
+                    return new WithdrawReply
+                    {
+                        Value = request.Value,
+                        Balance = this.balance,
+                        Primary = this.primaryBankProcess == this.processId,
+                    };
+                }
+
             }
         }
 
         public ReadReply ReadBalance(ReadRequest request)
         {
+            if (this.processId == this.primaryBankProcess)
+            {
+                //Start2PC(ref request);
+            }
+
             Console.WriteLine($"Read request from {request.ClientId}");
             return new ReadReply
             {
                 Balance = balance,
-                Primary = this.currentBankLeader == this.processId,
+                Primary = this.primaryBankProcess == this.processId,
             };
         }
 
@@ -190,19 +240,48 @@ namespace BankServer.Services
 
         public TentativeReply Tentative(TentativeRequest request)
         {
-            // TODO
+            bool acknowledge;
+            // TODO: "Has not changed until the current slot"
+            // This means that we have to verify every slot from
+            // request.Slot to this.currentSlot and all of them have to be == request.ProcessId ?
+
+            // Sender is the primary of the corresponding slot AND Sender is the current primary
+            if (this.primaryPerSlot[request.Slot - 1] == request.ProcessId && this.primaryBankProcess == request.ProcessId)
+                acknowledge = true;
+            else
+                acknowledge = false;
+
             return new TentativeReply
             {
-
+                Acknowledge = acknowledge,
             };
         }
 
-        public  CommitReply Commit(CommitRequest request)
+        public CommitReply Commit(CommitRequest request)
         {
-            // TODO
+            switch (request.Request.Action)
+            {
+                case (ClientAction.Deposit):
+                    Console.WriteLine("DEPOSITO");
+                    this.balance += request.Request.Value;
+                    break;
+
+                case (ClientAction.Withdraw):
+                    Console.WriteLine("WITHDRAW");
+                    if(request.Request.Value <= this.balance)
+                    {
+                        this.balance -= request.Request.Value;
+                    }
+                    break;
+
+                case (ClientAction.Read):
+                    // TODO: Secondaries dont need to "do reads" ?
+                    break;
+            }
+
             return new CommitReply
             {
-
+                // empty
             };
         }
 
@@ -210,6 +289,150 @@ namespace BankServer.Services
          * Two Phase Commit Service (Client) Implementation
          * Communication between BankServer and BankServer
          */
+
+        public void Start2PC<T>(ref T request)
+        {
+            // TODO: O QUE FAZER COM SEQUENCE NUMBER ASSOCIADO AO COMANDO ?
+            // GUARDAR ?
+            Console.WriteLine("Starting 2PC");
+            int sequenceNumber = this.currentSequenceNumber;
+            sequenceNumber++;
+
+            bool success = SendTentativeRequest(sequenceNumber);
+
+            if (success)
+            {
+                SendCommitRequest(ref request);
+                this.currentSequenceNumber = sequenceNumber;
+            }
+            else
+            {
+                // TODO: ?
+            }
+        }
+
+        public bool SendTentativeRequest(int sequenceNumber)
+        {
+            TentativeRequest tentativeRequest = new TentativeRequest
+            {
+                ProcessId = this.processId,
+                Slot = this.currentSlot,
+                SequenceNumber = sequenceNumber,
+            };
+
+            // Send request to all bank processes
+            List<TentativeReply> tentativeReplies = new List<TentativeReply>();
+            List<Task> tasks = new List<Task>();
+            foreach (var host in this.bankHosts)
+            {
+                if (host.Key == this.primaryBankProcess)
+                {
+                    continue;
+                }
+                Task t = Task.Run(() =>
+                {
+                    try
+                    {
+                        lock (tentativeReplies)
+                        {
+                            TentativeReply tentativeReply = host.Value.Tentative(tentativeRequest);
+                            tentativeReplies.Add(tentativeReply);
+                            Console.WriteLine(tentativeReplies.Count);
+                        }
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                    return Task.CompletedTask;
+                });
+                tasks.Add(t);
+            }
+
+            // Wait for a majority of responses
+            int majority = (this.bankHosts.Count - 1) / 2 + 1;
+            for (int i = 0; i < majority; i++)
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+
+            Console.WriteLine($"Sent {tentativeReplies.Count} tentative requests");
+
+            // Verify if majority acknowledges
+            int acknowledges = 0;
+            foreach (TentativeReply reply in tentativeReplies)
+            {
+                if (reply.Acknowledge)
+                    acknowledges++;
+            }
+
+            return acknowledges >= majority;
+        }
+
+        public void SendCommitRequest<T>(ref T request)
+        {
+            // TODO: Better way of doing this?
+            // Tambem se podia passsar string comando e int value
+            // e fazer switch com strings em vez de com tipos
+            ClientRequest clientRequest;
+            if (request.GetType() == typeof(DepositRequest))
+            {
+                DepositRequest r = (DepositRequest)Convert.ChangeType(request, typeof(DepositRequest));
+                clientRequest = new ClientRequest
+                {
+                    Action = ClientAction.Deposit,
+                    Value = r.Value,
+                };
+            }
+            else if (request.GetType() == typeof(WithdrawRequest))
+            {
+                WithdrawRequest r = (WithdrawRequest)Convert.ChangeType(request, typeof(WithdrawRequest));
+                clientRequest = new ClientRequest
+                {
+                    Action = ClientAction.Withdraw,
+                    Value = r.Value,
+                };
+            }
+            else
+            {
+                clientRequest = new ClientRequest
+                {
+                    Action = ClientAction.Read,
+                    Value = 0,
+                };
+            }
+
+            CommitRequest commitRequest = new CommitRequest
+            {
+                ProcessId = this.processId,
+                Slot = this.currentSlot,
+                SequenceNumber = currentSequenceNumber,
+                Request = clientRequest,
+            };
+
+            // Send request to all bank processes
+            List<Task> tasks = new List<Task>();
+            List<CommitReply> replies = new List<CommitReply>();
+            foreach (var host in this.bankHosts)
+            {
+                if (host.Key == this.primaryBankProcess)
+                {
+                    continue;
+                }
+                Task t = Task.Run(() =>
+                {
+                    try
+                    {
+                        CommitReply commitReply = host.Value.Commit(commitRequest);
+                        Console.WriteLine($"Sent commit requests");
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                    return Task.CompletedTask;
+                });
+                tasks.Add(t);
+            }
+        }
 
         /*
          * Cleanup Service (Server) Implementation
@@ -251,7 +474,8 @@ namespace BankServer.Services
             List<Task> tasks = new List<Task>();
             foreach (var host in this.boneyHosts)
             {
-                Task t = Task.Run(() => {
+                Task t = Task.Run(() =>
+                {
                     try
                     {
                         CompareAndSwapReply compareAndSwapReply = host.Value.CompareAndSwap(compareAndSwapRequest);
@@ -261,7 +485,6 @@ namespace BankServer.Services
                     {
                         Console.WriteLine(e.Status);
                     }
-
                     return Task.CompletedTask;
                 });
                 tasks.Add(t);

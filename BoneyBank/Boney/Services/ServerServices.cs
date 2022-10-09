@@ -300,13 +300,13 @@ namespace Boney.Services
 
         public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
         {
+
+            while (!this.slots.ContainsKey(request.Slot))
+            {
+                // wait for slot to be created
+            }
             lock (this)
             {
-                while (!this.slots.ContainsKey(request.Slot))
-                {
-                    // wait for slot to be created
-                }
-
                 SlotData slot = this.slots[request.Slot];
 
                 Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");

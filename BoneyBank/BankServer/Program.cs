@@ -13,7 +13,7 @@ namespace BankServer
         static private void SetSlotTimer(TimeSpan time, int slotDuration, ServerService serverService)
         {
             TimeSpan timeToGo = time - DateTime.Now.TimeOfDay;
-            if(timeToGo < TimeSpan.Zero)
+            if (timeToGo < TimeSpan.Zero)
             {
                 Console.WriteLine("Slot starting before finished server setup.");
                 Console.WriteLine("Aborting...");
@@ -30,19 +30,19 @@ namespace BankServer
         static void Main(string[] args)
         {
             AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
-            
+
             // Command Line Arguments
             int processId = int.Parse(args[0]);
             string host = args[1];
             int port = int.Parse(args[2]);
-            
+
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
 
             int numberOfProcesses = config.NumberOfProcesses;
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
             Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(
-                key => key.Id, 
+                key => key.Id,
                 value => new TwoPhaseCommit.TwoPhaseCommitClient(GrpcChannel.ForAddress(value.Address))
             );
             Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts = config.BoneyServers.ToDictionary(
@@ -63,7 +63,7 @@ namespace BankServer
 
             Server server = new Server
             {
-                Services = { 
+                Services = {
                     Bank.BindService(new BankService(serverService)),
                     TwoPhaseCommit.BindService(new TwoPhaseCommitService(serverService)),
                 },

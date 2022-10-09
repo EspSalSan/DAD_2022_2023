@@ -3,8 +3,6 @@ using Grpc.Core;
 using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using Utilities;
 
@@ -61,7 +59,7 @@ namespace Boney
 
             Server server = new Server
             {
-                Services = { 
+                Services = {
                     Paxos.BindService(new PaxosService(serverService)),
                     CompareAndSwap.BindService(new CompareAndSwapService(serverService))
                 },
@@ -72,7 +70,7 @@ namespace Boney
 
             Console.WriteLine($"Boney ({processId}) listening on port {port}");
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
-            Console.WriteLine($"Working with {boneyHosts.Count} boney processes)");
+            Console.WriteLine($"Working with {boneyHosts.Count} boney processes");
 
             // Setting timeSpan to 5 seconds from Now just for testing
             TimeSpan timeSpan = DateTime.Now.TimeOfDay;

@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using static Grpc.Core.Metadata;
 
 namespace BankServer.Services
 {
@@ -49,6 +47,7 @@ namespace BankServer.Services
         }
 
         /*
+         * Prepare Slot
          * TODO: Description
          * Por enquanto não parece precisar de lock
          * Provavelmente precisa
@@ -79,16 +78,16 @@ namespace BankServer.Services
             this.isFrozen = this.processFrozenPerSlot[currentSlot - 1];
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
-            // Select new leader
-            int leader = int.MaxValue;
+            // Choose new primary process
+            int primary = int.MaxValue;
             foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[currentSlot - 1])
             {
                 // Bank process that is not suspected and has the lowest id
-                if (!process.Value && process.Key < leader && this.bankHosts.ContainsKey(process.Key))
-                    leader = process.Key;
+                if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
+                    primary = process.Key;
             }
 
-            if (leader == int.MaxValue)
+            if (primary == int.MaxValue)
             {
                 Console.WriteLine("No process is valid for leader election.");
                 return;
@@ -98,7 +97,7 @@ namespace BankServer.Services
             // Save old leader to know if cleanup is needed
             int primaryBankProcess = this.primaryBankProcess;
 
-            int compareAndSwapReply = SendCompareAndSwapRequest(leader, currentSlot);
+            int compareAndSwapReply = SendCompareAndSwapRequest(primary, currentSlot);
 
             if (compareAndSwapReply == -1)
             {
@@ -108,11 +107,11 @@ namespace BankServer.Services
             this.primaryBankProcess = compareAndSwapReply;
             this.primaryPerSlot.Add(this.primaryBankProcess);
 
-            Console.WriteLine($"Process {this.primaryBankProcess} is the new leader.");
+            Console.WriteLine($"Process {this.primaryBankProcess} is the new primary.");
 
             if (this.primaryBankProcess != primaryBankProcess && this.primaryBankProcess == this.processId)
             {
-                Console.WriteLine("Leader has changed, starting cleanup...");
+                Console.WriteLine("[NOT IMPLEMENTED] Leader has changed, starting cleanup...");
                 // TODO: Cleanup
             }
 
@@ -196,8 +195,8 @@ namespace BankServer.Services
                 {
                     return new WithdrawReply
                     {
-                        Value = request.Value > this.balance ? 0 : (this.balance -= request.Value),
-                        Balance = this.balance,
+                        Value = request.Value > this.balance ? 0 : request.Value,
+                        Balance = request.Value > this.balance ?  this.balance : (this.balance -= request.Value),
                         Primary = this.primaryBankProcess == this.processId,
                     };
                 }
@@ -232,15 +231,12 @@ namespace BankServer.Services
         /*
          * Two Phase Commit Service (Server) Implementation
          * Communication between BankServer and BankServer
-         * TODO: 
-         * Serve apenas de backup ?
-         * Quando um primario recebe um pedido faz sempre 2PC ?
-         * O secundario responde a algum tipo de pedido ?
-         * 
          */
 
         public TentativeReply Tentative(TentativeRequest request)
         {
+            Console.WriteLine($"Tentative from {request.ProcessId} in slot {request.Slot} with sequence number {request.SequenceNumber}");
+
             bool acknowledge;
             // TODO: "Has not changed until the current slot"
             // This means that we have to verify every slot from
@@ -260,16 +256,16 @@ namespace BankServer.Services
 
         public CommitReply Commit(CommitRequest request)
         {
+            Console.WriteLine($"Commit from {request.ProcessId} in slot {request.Slot} with sequence number {request.SequenceNumber} to {request.Request.Action}");
+
             switch (request.Request.Action)
             {
                 case (ClientAction.Deposit):
-                    Console.WriteLine("DEPOSITO");
                     this.balance += request.Request.Value;
                     break;
 
                 case (ClientAction.Withdraw):
-                    Console.WriteLine("WITHDRAW");
-                    if(request.Request.Value <= this.balance)
+                    if (request.Request.Value <= this.balance)
                     {
                         this.balance -= request.Request.Value;
                     }
@@ -314,6 +310,8 @@ namespace BankServer.Services
 
         public bool SendTentativeRequest(int sequenceNumber)
         {
+            Console.WriteLine("Sending tentatives.");
+
             TentativeRequest tentativeRequest = new TentativeRequest
             {
                 ProcessId = this.processId,
@@ -370,6 +368,7 @@ namespace BankServer.Services
 
         public void SendCommitRequest<T>(ref T request)
         {
+            Console.WriteLine("Sending commits.");
             // TODO: Better way of doing this?
             // Tambem se podia passsar string comando e int value
             // e fazer switch com strings em vez de com tipos
@@ -423,7 +422,6 @@ namespace BankServer.Services
                     try
                     {
                         CommitReply commitReply = host.Value.Commit(commitRequest);
-                        Console.WriteLine($"Sent commit requests");
                     }
                     catch (Grpc.Core.RpcException e)
                     {
@@ -454,22 +452,27 @@ namespace BankServer.Services
          * Communication between BankServer and BankServer
          */
 
+        public void SendCleanupRequest()
+        {
+            // TODO
+        }
+
         /*
          * Compare And Swap Service (Client) Implementation
          * Communication between BankServer and BankServer
          */
 
-        public int SendCompareAndSwapRequest(int leader, int currentSlot)
+        public int SendCompareAndSwapRequest(int primary, int currentSlot)
         {
             int compareAndSwapReplyValue = -1;
 
             CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
             {
                 Slot = currentSlot,
-                Invalue = leader,
+                Invalue = primary,
             };
 
-            Console.WriteLine($"Trying to elect process {leader} as leader.");
+            Console.WriteLine($"Trying to elect process {primary} as primary.");
 
             // Send request to all boney processes
             List<Task> tasks = new List<Task>();

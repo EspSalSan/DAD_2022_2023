@@ -66,7 +66,7 @@ namespace PuppetMaster
             }
         }
 
-        static void Main(string[] args)
+        static void Main()
         {
             string baseDirectory = Common.GetSolutionDir();
             string configFilePath = Path.Join(baseDirectory, "PuppetMaster", "config.txt");
@@ -77,24 +77,12 @@ namespace PuppetMaster
                 return;
             }
 
-            int m = 5 / 2 + 1;
-            Console.WriteLine($"{m}");
-
-
-            List<Process> processList = new List<Process>();
-
-            foreach(string line in File.ReadAllLines(configFilePath))
+            foreach (string line in File.ReadAllLines(configFilePath))
             {
                 string[] configArgs = line.Split(" ");
 
                 if (configArgs[0].Equals("P"))
-                {
-                    Process p = CreateProcess(configArgs);
-                    if(p != null)
-                    {
-                        processList.Add(p);
-                    }
-                }
+                    CreateProcess(configArgs);
             }
         }
     }

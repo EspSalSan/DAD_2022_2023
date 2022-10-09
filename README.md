@@ -7,14 +7,18 @@ Boney Bank is a three tier system fault-tolerant bank application.
 
 ## How to run
 
+Inside the BoneyBank directory, run:
+```
+dotnet build .
+dotnet run --project PuppetMaster
+```
 
-## Blabla
-
+This should start processes acording to the config.txt inside PuppterMaster project.
 
 ## Credit
 
-| Name               | User               |
+| Name               | Github User        |
 |--------------------|--------------------|
-| Diogo Santos       | DiogoSantoss       |     |
+| Diogo Santos       | DiogoSantoss       |
 | Guilherme Salvador | guilhermesalvador  |
 | Eduardo Espadeiro  | EdSwordsmith       |

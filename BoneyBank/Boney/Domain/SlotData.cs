@@ -14,7 +14,7 @@ namespace Boney.Domain
         private int readTimestamp;
         private int writeTimestamp;
         private List<(int, int)> decidedReceived;
-        
+
         public SlotData(int slot)
         {
             this.slot = slot;
@@ -32,6 +32,6 @@ namespace Boney.Domain
         public int ReadTimestamp { get => readTimestamp; set => readTimestamp = value; }
         public int WriteTimestamp { get => writeTimestamp; set => writeTimestamp = value; }
         public int CompareAndSwapValue { get => compareAndSwapValue; set => compareAndSwapValue = value; }
-        public List<(int, int)> DecidedReceived { get => decidedReceived; set => decidedReceived = value; } 
+        public List<(int, int)> DecidedReceived { get => decidedReceived; set => decidedReceived = value; }
     }
 }

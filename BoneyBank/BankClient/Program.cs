@@ -2,13 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Utilities;
 
 namespace BankClient
 {
-    using static Grpc.Core.Metadata;
     using BankHosts = Dictionary<int, Bank.BankClient>;
 
     internal class Program

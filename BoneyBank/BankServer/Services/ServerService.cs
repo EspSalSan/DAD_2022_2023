@@ -91,6 +91,7 @@ namespace BankServer.Services
             if (leader == int.MaxValue)
             {
                 Console.WriteLine("No process is valid for leader election.");
+                return;
                 // TODO: What to do when all processes are frozen ?
             }
 

@@ -43,25 +43,22 @@ namespace Boney.Services
          */
         public void PrepareSlot()
         {
-            lock (this)
+            if (this.currentSlot >= processFrozenPerSlot.Count)
             {
-                if (this.currentSlot >= processFrozenPerSlot.Count)
-                {
-                    Console.WriteLine("Slot duration ended but no more slots to process.");
-                    return;
-                }
-
-                this.currentSlot += 1;
-
-                Console.WriteLine($"Preparing slot {this.currentSlot}...");
-
-                SlotData slot = new SlotData(this.currentSlot);
-                slots.TryAdd(this.currentSlot, slot);
-
-                // TODO é preciso fazer alguma coisa no Boney quando começa um slot ?
-
-                Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
+                Console.WriteLine("Slot duration ended but no more slots to process.");
+                return;
             }
+
+            this.currentSlot += 1;
+
+            Console.WriteLine($"Preparing slot {this.currentSlot}...");
+
+            SlotData slot = new SlotData(this.currentSlot);
+            slots.TryAdd(this.currentSlot, slot);
+
+            // TODO é preciso fazer alguma coisa no Boney quando começa um slot ?
+
+            Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
         }
 
         /*
@@ -76,20 +73,32 @@ namespace Boney.Services
                 // wait for slot to be created
             }
 
-            Console.WriteLine($"Received prepare from {request.LeaderId} in slot {request.Slot}");
-
-            SlotData slot = this.slots[request.Slot];
-
-            if (slot.ReadTimestamp < request.LeaderId)
+            SlotData slot;
+            PromiseReply reply;
+            
+            lock (this)
             {
-                slot.ReadTimestamp = request.LeaderId;
+                Console.WriteLine($"Received prepare from {request.LeaderId} in slot {request.Slot}");
+                
+                slot = this.slots[request.Slot];
+                
+                if (slot.ReadTimestamp < request.LeaderId)
+                {
+                    slot.ReadTimestamp = request.LeaderId;
+                }
+
+                reply = new PromiseReply
+                {
+                    Slot = request.Slot,
+                    ReadTimestamp = slot.ReadTimestamp,
+                    Value = slot.CompareAndSwapValue,
+                };
+
+                Console.WriteLine($"--> Prepare({request.LeaderId})");
+                Console.WriteLine($"    <-- Promise({slot.ReadTimestamp},{slot.CompareAndSwapValue})");
             }
-            return new PromiseReply
-            {
-                Slot = request.Slot,
-                ReadTimestamp = slot.ReadTimestamp,
-                Value = slot.CompareAndSwapValue,
-            };
+
+            return reply;
         }
 
         public AcceptedReply AcceptPaxos(AcceptRequest request)
@@ -103,6 +112,8 @@ namespace Boney.Services
 
             SlotData slot = this.slots[request.Slot];
 
+            Console.WriteLine($"--> Accept({request.LeaderId}, {request.Value})");
+
             if (slot.WriteTimestamp < request.LeaderId)
             {
                 slot.WriteTimestamp = request.LeaderId;
@@ -111,6 +122,9 @@ namespace Boney.Services
                 // Acceptors send the information to Learners
                 SendDecideRequest(slot.WriteTimestamp, request.Value);
             }
+
+
+            Console.WriteLine($"    <-- Accepted({slot.WriteTimestamp},{slot.CompareAndSwapValue})");
 
             return new AcceptedReply
             {
@@ -131,6 +145,8 @@ namespace Boney.Services
             Console.WriteLine($"Received decide with writeTS {request.WriteTimestamp} and value {request.Value} in slot {request.Slot}");
 
             SlotData slot = this.slots[request.Slot];
+
+            Console.WriteLine($"--> Decide(sem-lider,{request.WriteTimestamp},{request.Value})");
 
             lock (slot)
             {
@@ -163,6 +179,8 @@ namespace Boney.Services
 
                 // USEFULL TO PRINT DICTIONARIES
                 //received.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
+
+                Console.WriteLine($"    <-- Decided()");
 
                 return new DecideReply
                 {
@@ -315,83 +333,92 @@ namespace Boney.Services
                 // wait for slot to be created
             }
 
+
+            SlotData slot;
+            bool needsToWait;
+            
             lock (this)
             {
-                SlotData slot = this.slots[request.Slot];
-
+                slot = this.slots[request.Slot];
                 Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
+                needsToWait = !(slot.CompareAndSwapValue == -1 && slot.CurrentValue == -1);
                 // needs better names
                 // CompareAndSwapValue -> valor que foi trocado pelo banco
                 // CurrentValue -> Valor que foi decido pelo paxos
-                if (slot.CompareAndSwapValue == -1 && slot.CurrentValue == -1)
+                if (!needsToWait)
                 {
                     slot.CompareAndSwapValue = request.Invalue;
                     slot.IsPaxosRunning = true;
                 }
-                else
-                {
-                    return WaitForPaxosToEnd(slot, request);
-                }
+            }
 
-                // Do paxos
-                Console.WriteLine("Starting Paxos...");
-
-                // Compute paxos leader (lowest id with NS)
-                // Select new leader
-                Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
-                int leader = int.MaxValue;
-                foreach (KeyValuePair<int, bool> process in processesSuspected)
-                {
-                    // Process that is not suspected and has the lowest id
-                    if (!process.Value && process.Key < leader && this.boneyHosts.ContainsKey(process.Key))
-                        leader = process.Key;
-                }
-
-                if (leader == int.MaxValue)
-                {
-                    // TODO: All processes are frozen, what to do ?
-                }
-
-                Console.WriteLine($"Paxos Leader is {leader}");
-
-                if (this.processId != leader)
-                {
-                    return WaitForPaxosToEnd(slot, request);
-                }
-
-                // Send prepare to all acceptors
-                List<PromiseReply> promiseResponses = SendPrepareRequest();
-
-                // Stop being leader if there is a more recent one
-                foreach (var response in promiseResponses)
-                {
-                    if (response.ReadTimestamp > slot.ReadTimestamp)
-                        return WaitForPaxosToEnd(slot, request);
-                }
-
-                // Get values from promises
-                int mostRecent = -1;
-                int valueToPropose = -1;
-                foreach (var response in promiseResponses)
-                {
-                    if (response.ReadTimestamp > mostRecent)
-                    {
-                        mostRecent = response.ReadTimestamp;
-                        valueToPropose = response.Value;
-                    }
-                }
-
-                // If acceptors have no value, send own value
-                if (valueToPropose == -1)
-                    valueToPropose = slot.CompareAndSwapValue;
-
-                // Send accept to all acceptors which will send decide to learners
-                List<AcceptedReply> acceptResponses = SendAcceptRequest(valueToPropose);
-
-                // Wait for learners to decide
+            if (needsToWait)
+            {
                 return WaitForPaxosToEnd(slot, request);
             }
+
+            // Do paxos
+            Console.WriteLine("Starting Paxos...");
+
+            // Compute paxos leader (lowest id with NS)
+            // Select new leader
+            Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
+            int leader = int.MaxValue;
+            foreach (KeyValuePair<int, bool> process in processesSuspected)
+            {
+                // Process that is not suspected and has the lowest id
+                if (!process.Value && process.Key < leader && this.boneyHosts.ContainsKey(process.Key))
+                    leader = process.Key;
+            }
+
+            if (leader == int.MaxValue)
+            {
+                // TODO: All processes are frozen, what to do ?
+            }
+
+            Console.WriteLine($"Paxos Leader is {leader}");
+
+            if (this.processId != leader)
+            {
+                return WaitForPaxosToEnd(slot, request);
+            }
+
+            // Send prepare to all acceptors
+            List<PromiseReply> promiseResponses = SendPrepareRequest();
+
+            // Stop being leader if there is a more recent one
+            foreach (var response in promiseResponses)
+            {
+                //if (response.ReadTimestamp > slot.ReadTimestamp)
+                if (response.ReadTimestamp > this.processId)
+                {
+                    Console.WriteLine($"{this.processId} KILL SELF");
+                    return WaitForPaxosToEnd(slot, request);
+                }
+            }
+
+            // Get values from promises
+            int mostRecent = -1;
+            int valueToPropose = -1;
+            foreach (var response in promiseResponses)
+            {
+                if (response.ReadTimestamp > mostRecent)
+                {
+                    mostRecent = response.ReadTimestamp;
+                    valueToPropose = response.Value;
+                }
+            }
+
+            // If acceptors have no value, send own value
+            if (valueToPropose == -1)
+                valueToPropose = slot.CompareAndSwapValue;
+
+            // Send accept to all acceptors which will send decide to learners
+            List<AcceptedReply> acceptResponses = SendAcceptRequest(valueToPropose);
+
+            // Wait for learners to decide
+            return WaitForPaxosToEnd(slot, request);
         }
     }
 }

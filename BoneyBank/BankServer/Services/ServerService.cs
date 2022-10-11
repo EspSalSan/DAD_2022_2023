@@ -16,13 +16,13 @@ namespace BankServer.Services
         private readonly Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts;
 
         // Changing variables
+        private int totalSlots;
         private int currentSlot;
-        private int primaryBankProcess;
         private bool isFrozen;
         private int balance;
         // private Dictionary<int, int> lastKnownSequenceNumber;
         private int currentSequenceNumber;
-        private List<int> primaryPerSlot;
+        private Dictionary<int,int> primaryPerSlot;
 
         public ServerService(
             int processId,
@@ -39,18 +39,15 @@ namespace BankServer.Services
             this.boneyHosts = boneyHosts;
 
             this.currentSlot = 0;
-            this.primaryBankProcess = 0;
             this.isFrozen = false;
             this.balance = 0;
             this.currentSequenceNumber = 0;
-            this.primaryPerSlot = new List<int>();
+            this.primaryPerSlot = new Dictionary<int,int>();
         }
 
         /*
          * Prepare Slot
          * TODO: Description
-         * Por enquanto não parece precisar de lock
-         * Provavelmente precisa
          */
         public void PrepareSlot()
         {
@@ -64,81 +61,41 @@ namespace BankServer.Services
              * (maybe) send them to the listOfPending (if the leader is another)
              */
 
-            if (this.currentSlot >= processFrozenPerSlot.Count)
+            if (this.totalSlots >= processFrozenPerSlot.Count)
             {
                 Console.WriteLine("Slot duration ended but no more slots to process.");
                 return;
             }
 
-            this.currentSlot += 1;
-
-            Console.WriteLine($"Preparing slot {this.currentSlot}...");
-
             // Switch process state
-            this.isFrozen = this.processFrozenPerSlot[currentSlot - 1];
+            this.isFrozen = this.processFrozenPerSlot[totalSlots];
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
-            // Choose new primary process
-            int primary = int.MaxValue;
-            foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[currentSlot - 1])
-            {
-                // Bank process that is not suspected and has the lowest id
-                if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
-                    primary = process.Key;
-            }
+            // Global slot counter
+            this.totalSlots++;
 
-            if (primary == int.MaxValue)
+            if (this.isFrozen)
             {
-                Console.WriteLine("No process is valid for leader election.");
                 return;
-                // TODO: What to do when all processes are frozen ?
             }
 
-            // Save old leader to know if cleanup is needed
-            int primaryBankProcess = this.primaryBankProcess;
-
-            int compareAndSwapReply = SendCompareAndSwapRequest(primary, currentSlot);
-
-            if (compareAndSwapReply == -1)
+            // Verify if there is missing history
+            while(this.currentSlot != this.totalSlots)
             {
-                // TODO: something went wrong at the compare and swap service
+                // Local slot counter
+                this.currentSlot++;
+                
+                Console.WriteLine($"Preparing slot {this.currentSlot}...");
+                
+                DoCompareAndSwap(this.currentSlot);
+                
+                if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[currentSlot] != this.primaryPerSlot[this.currentSlot-1])
+                {
+                    Console.WriteLine("[NOT IMPLEMENTED] Leader has changed, starting cleanup...");
+                    // TODO: Cleanup
+                }
+
             }
-
-            this.primaryBankProcess = compareAndSwapReply;
-            this.primaryPerSlot.Add(this.primaryBankProcess);
-
-            Console.WriteLine($"Process {this.primaryBankProcess} is the new primary.");
-
-            if (this.primaryBankProcess != primaryBankProcess && this.primaryBankProcess == this.processId)
-            {
-                Console.WriteLine("[NOT IMPLEMENTED] Leader has changed, starting cleanup...");
-                // TODO: Cleanup
-            }
-
-
-            // só faz cleanup o processo que se tornou lider e antes nao era 
-            // do cleanup();
-            // Send 'ListPendingRequests(LastKnownSequenceNumber)' to all banks 
-            // Nodes only reply to this request after they have moved to the new slot and the request comes from the primary assigned for that slot
-            // Wait for a majority of replies
-            // Collect sequence numbers from previous primaries that have not been commited yet
-            // propose and commit those sequence numbers
-            // start assigning new sequence numbers to commands that dont have
-
-            // em portugues:
-            // O (novo) Lider envia o numero de sequencia mais alto que foi committed a todas as replicas
-            // Recebe vários numeros de sequencia que foram proposed mas não committed
-            // Dá propose e commit desses numeros de sequencia
-            // Quando acabar, começa a dar assign de numeros de sequencia a comandos que ainda nao tenham
-
-            // Coisas que 'parecem' ser preciso guardar para cada banco (por slot)
-            /*
-             * Comandos sem sequenceNumber
-             * Comandos com sequenceNumber
-             * Comandos proposed
-             * Comandos commited
-             */
-
             Console.WriteLine("Preparation ended.");
         }
 
@@ -150,21 +107,26 @@ namespace BankServer.Services
 
         public DepositReply DepositMoney(DepositRequest request)
         {
+            while (this.isFrozen)
+            {
+                // wait until not frozen
+            }
+            
             Console.WriteLine($"Deposit request ({request.Value}) from {request.ClientId}");
 
-            if (this.processId == this.primaryBankProcess)
+            if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
                 Start2PC(ref request);
             }
 
             lock (this)
             {
-                if (this.processId == this.primaryBankProcess)
+                if (this.processId == this.primaryPerSlot[this.currentSlot])
                 {
                     return new DepositReply
                     {
                         Balance = this.balance += request.Value,
-                        Primary = this.primaryBankProcess == this.processId,
+                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
                 }
                 else
@@ -172,7 +134,7 @@ namespace BankServer.Services
                     return new DepositReply
                     {
                         Balance = this.balance,
-                        Primary = this.primaryBankProcess == this.processId,
+                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
                 }
 
@@ -182,22 +144,27 @@ namespace BankServer.Services
 
         public WithdrawReply WithdrawMoney(WithdrawRequest request)
         {
+            while (this.isFrozen)
+            {
+                // wait until not frozen
+            }
+            
             Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
 
-            if (this.processId == this.primaryBankProcess)
+            if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
                 Start2PC(ref request);
             }
 
             lock (this)
             {
-                if (this.processId == this.primaryBankProcess)
+                if (this.processId == this.primaryPerSlot[this.currentSlot])
                 {
                     return new WithdrawReply
                     {
                         Value = request.Value > this.balance ? 0 : request.Value,
                         Balance = request.Value > this.balance ?  this.balance : (this.balance -= request.Value),
-                        Primary = this.primaryBankProcess == this.processId,
+                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
                 }
                 else
@@ -206,7 +173,7 @@ namespace BankServer.Services
                     {
                         Value = request.Value,
                         Balance = this.balance,
-                        Primary = this.primaryBankProcess == this.processId,
+                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
                 }
 
@@ -215,7 +182,12 @@ namespace BankServer.Services
 
         public ReadReply ReadBalance(ReadRequest request)
         {
-            if (this.processId == this.primaryBankProcess)
+            while (this.isFrozen)
+            {
+                // wait until not frozen
+            }
+            
+            if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
                 //Start2PC(ref request);
             }
@@ -224,7 +196,7 @@ namespace BankServer.Services
             return new ReadReply
             {
                 Balance = balance,
-                Primary = this.primaryBankProcess == this.processId,
+                Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
             };
         }
 
@@ -243,10 +215,12 @@ namespace BankServer.Services
             // request.Slot to this.currentSlot and all of them have to be == request.ProcessId ?
 
             // Sender is the primary of the corresponding slot AND Sender is the current primary
-            if (this.primaryPerSlot[request.Slot - 1] == request.ProcessId && this.primaryBankProcess == request.ProcessId)
-                acknowledge = true;
-            else
-                acknowledge = false;
+            //if (this.primaryPerSlot[request.Slot] == request.ProcessId && this.primaryBankProcess == request.ProcessId)
+            //    acknowledge = true;
+            //else
+            //    acknowledge = false;
+
+            acknowledge = true;
 
             return new TentativeReply
             {
@@ -324,7 +298,7 @@ namespace BankServer.Services
             List<Task> tasks = new List<Task>();
             foreach (var host in this.bankHosts)
             {
-                if (host.Key == this.primaryBankProcess)
+                if (host.Key == this.primaryPerSlot[this.currentSlot])
                 {
                     continue;
                 }
@@ -413,7 +387,7 @@ namespace BankServer.Services
             List<CommitReply> replies = new List<CommitReply>();
             foreach (var host in this.bankHosts)
             {
-                if (host.Key == this.primaryBankProcess)
+                if (host.Key == this.primaryPerSlot[this.currentSlot])
                 {
                     continue;
                 }
@@ -440,6 +414,30 @@ namespace BankServer.Services
 
         public ListPendingRequestsReply Cleanup(ListPendingRequestsRequest request)
         {
+
+            // só faz cleanup o processo que se tornou lider e antes nao era 
+            // do cleanup();
+            // Send 'ListPendingRequests(LastKnownSequenceNumber)' to all banks 
+            // Nodes only reply to this request after they have moved to the new slot and the request comes from the primary assigned for that slot
+            // Wait for a majority of replies
+            // Collect sequence numbers from previous primaries that have not been commited yet
+            // propose and commit those sequence numbers
+            // start assigning new sequence numbers to commands that dont have
+
+            // em portugues:
+            // O (novo) Lider envia o numero de sequencia mais alto que foi committed a todas as replicas
+            // Recebe vários numeros de sequencia que foram proposed mas não committed
+            // Dá propose e commit desses numeros de sequencia
+            // Quando acabar, começa a dar assign de numeros de sequencia a comandos que ainda nao tenham
+
+            // Coisas que 'parecem' ser preciso guardar para cada banco (por slot)
+            /*
+             * Comandos sem sequenceNumber
+             * Comandos com sequenceNumber
+             * Comandos proposed
+             * Comandos commited
+             */
+            
             // TODO
             return new ListPendingRequestsReply
             {
@@ -461,14 +459,46 @@ namespace BankServer.Services
          * Compare And Swap Service (Client) Implementation
          * Communication between BankServer and BankServer
          */
+        public void DoCompareAndSwap(int slot)
+        {
+            // Choose new primary process
+            int primary = int.MaxValue;
+            foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[slot - 1])
+            {
+                // Bank process that is not suspected and has the lowest id
+                if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
+                    primary = process.Key;
+            }
 
-        public int SendCompareAndSwapRequest(int primary, int currentSlot)
+            if (primary == int.MaxValue)
+            {
+                Console.WriteLine("No process is valid for leader election.");
+                return;
+                // TODO: What to do when all processes are frozen ?
+            }
+
+            // BIG TODO: If someone is frozen and CAP doesnt work, the leader for that slot
+            // is the same leader as the slot before
+            // THIS NEEDS TIMEOUTS when waiting for the replies
+            int electedPrimary = SendCompareAndSwapRequest(primary, slot);
+
+            if (electedPrimary == -1)
+            {
+                // TODO: something went wrong at the compare and swap service
+            }
+
+            this.primaryPerSlot.Add(slot, electedPrimary);
+
+            Console.WriteLine($"Process {electedPrimary} is the primary for slot {slot}.");
+        }
+        
+        public int SendCompareAndSwapRequest(int primary, int slot)
         {
             int compareAndSwapReplyValue = -1;
 
             CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
             {
-                Slot = currentSlot,
+                Slot = slot,
                 Invalue = primary,
             };
 

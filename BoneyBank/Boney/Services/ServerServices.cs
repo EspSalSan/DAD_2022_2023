@@ -49,8 +49,12 @@ namespace Boney.Services
                 return;
             }
 
-            this.currentSlot += 1;
+            // Switch process state
+            this.isFrozen = this.processFrozenPerSlot[currentSlot];
+            Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
+            this.currentSlot += 1;
+            
             Console.WriteLine($"Preparing slot {this.currentSlot}...");
 
             SlotData slot = new SlotData(this.currentSlot);
@@ -73,13 +77,16 @@ namespace Boney.Services
                 // wait for slot to be created
             }
 
+            while (this.isFrozen)
+            {
+                // wait for slot to be unfrozen
+            }
+
             SlotData slot;
             PromiseReply reply;
             
             lock (this)
             {
-                Console.WriteLine($"Received prepare from {request.LeaderId} in slot {request.Slot}");
-                
                 slot = this.slots[request.Slot];
                 
                 if (slot.ReadTimestamp < request.LeaderId)
@@ -94,8 +101,8 @@ namespace Boney.Services
                     Value = slot.CompareAndSwapValue,
                 };
 
-                Console.WriteLine($"--> Prepare({request.LeaderId})");
-                Console.WriteLine($"    <-- Promise({slot.ReadTimestamp},{slot.CompareAndSwapValue})");
+                Console.WriteLine($"({request.Slot})--> Prepare({request.LeaderId})");
+                Console.WriteLine($"({request.Slot})    <-- Promise({slot.ReadTimestamp},{slot.CompareAndSwapValue})");
             }
 
             return reply;
@@ -108,11 +115,14 @@ namespace Boney.Services
                 // wait for slot to be created
             }
 
-            Console.WriteLine($"Received accept from {request.LeaderId} with value {request.Value} in slot {request.Slot}");
+            while (this.isFrozen)
+            {
+                // wait for slot to be unfrozen
+            }
 
             SlotData slot = this.slots[request.Slot];
 
-            Console.WriteLine($"--> Accept({request.LeaderId}, {request.Value})");
+            Console.WriteLine($"({request.Slot})--> Accept({request.LeaderId}, {request.Value})");
 
             if (slot.WriteTimestamp < request.LeaderId)
             {
@@ -123,8 +133,7 @@ namespace Boney.Services
                 SendDecideRequest(slot.WriteTimestamp, request.Value);
             }
 
-
-            Console.WriteLine($"    <-- Accepted({slot.WriteTimestamp},{slot.CompareAndSwapValue})");
+            Console.WriteLine($"({request.Slot})    <-- Accepted({slot.WriteTimestamp},{slot.CompareAndSwapValue})");
 
             return new AcceptedReply
             {
@@ -132,7 +141,6 @@ namespace Boney.Services
                 WriteTimestamp = slot.WriteTimestamp,
                 Value = slot.CompareAndSwapValue,
             };
-
         }
 
         public DecideReply DecidePaxos(DecideRequest request)
@@ -142,11 +150,14 @@ namespace Boney.Services
                 // wait for slot to be created
             }
 
-            Console.WriteLine($"Received decide with writeTS {request.WriteTimestamp} and value {request.Value} in slot {request.Slot}");
+            while (this.isFrozen)
+            {
+                // wait for slot to be unfrozen
+            }
 
             SlotData slot = this.slots[request.Slot];
 
-            Console.WriteLine($"--> Decide(sem-lider,{request.WriteTimestamp},{request.Value})");
+            Console.WriteLine($"({request.Slot})--> Decide({request.WriteTimestamp},{request.Value})");
 
             lock (slot)
             {
@@ -180,7 +191,7 @@ namespace Boney.Services
                 // USEFULL TO PRINT DICTIONARIES
                 //received.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
 
-                Console.WriteLine($"    <-- Decided()");
+                Console.WriteLine($"({request.Slot})    <-- Decided()");
 
                 return new DecideReply
                 {
@@ -197,7 +208,7 @@ namespace Boney.Services
         public List<PromiseReply> SendPrepareRequest()
         {
 
-            Console.WriteLine("Sending prepares");
+            Console.WriteLine($"Sending prepares with leader id {this.processId}");
 
             PrepareRequest prepareRequest = new PrepareRequest
             {
@@ -234,7 +245,7 @@ namespace Boney.Services
 
         public List<AcceptedReply> SendAcceptRequest(int value)
         {
-            Console.WriteLine("Sending accepts");
+            Console.WriteLine($"Sending accepts with leader id {this.processId}");
 
             AcceptRequest acceptRequest = new AcceptRequest
             {
@@ -274,7 +285,7 @@ namespace Boney.Services
         public void SendDecideRequest(int writeTimestamp, int value)
         {
 
-            Console.WriteLine("Sending decides");
+            Console.WriteLine($"Sending decides with value {value}");
 
             DecideRequest decideRequest = new DecideRequest
             {
@@ -331,6 +342,11 @@ namespace Boney.Services
             while (!this.slots.ContainsKey(request.Slot))
             {
                 // wait for slot to be created
+            }
+
+            while (this.isFrozen)
+            {
+                // wait for slot to be unfrozen
             }
 
 

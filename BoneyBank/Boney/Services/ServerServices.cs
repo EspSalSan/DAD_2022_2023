@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Boney.Services
@@ -84,9 +85,11 @@ namespace Boney.Services
 
             SlotData slot;
             PromiseReply reply;
-            
+
+            Console.WriteLine($"Trying to lock (prepare) - {Thread.CurrentThread.ManagedThreadId}");
             lock (this)
             {
+                Console.WriteLine($"Locking... - {Thread.CurrentThread.ManagedThreadId}");
                 slot = this.slots[request.Slot];
                 
                 if (slot.ReadTimestamp < request.LeaderId)
@@ -104,6 +107,7 @@ namespace Boney.Services
                 Console.WriteLine($"({request.Slot})--> Prepare({request.LeaderId})");
                 Console.WriteLine($"({request.Slot})    <-- Promise({slot.ReadTimestamp},{slot.CompareAndSwapValue})");
             }
+            Console.WriteLine($"Unocking... - {Thread.CurrentThread.ManagedThreadId}");
 
             return reply;
         }
@@ -130,7 +134,7 @@ namespace Boney.Services
                 slot.CompareAndSwapValue = request.Value;
 
                 // Acceptors send the information to Learners
-                SendDecideRequest(slot.WriteTimestamp, request.Value);
+                SendDecideRequest(slot.Slot, slot.WriteTimestamp, request.Value);
             }
 
             Console.WriteLine($"({request.Slot})    <-- Accepted({slot.WriteTimestamp},{slot.CompareAndSwapValue})");
@@ -159,8 +163,10 @@ namespace Boney.Services
 
             Console.WriteLine($"({request.Slot})--> Decide({request.WriteTimestamp},{request.Value})");
 
+            Console.WriteLine($"Trying to lock (decide) - {Thread.CurrentThread.ManagedThreadId}");
             lock (slot)
             {
+                Console.WriteLine($"Locking... - {Thread.CurrentThread.ManagedThreadId}");
                 slot.DecidedReceived.Add((request.WriteTimestamp, request.Value));
 
                 int majority = this.boneyHosts.Count / 2 + 1;
@@ -187,17 +193,17 @@ namespace Boney.Services
                         slot.IsPaxosRunning = false;
                     }
                 }
+            }
+            Console.WriteLine($"Unlocking... - {Thread.CurrentThread.ManagedThreadId}");
+            // USEFULL TO PRINT DICTIONARIES
+            //received.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
 
-                // USEFULL TO PRINT DICTIONARIES
-                //received.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
-
-                Console.WriteLine($"({request.Slot})    <-- Decided()");
+            Console.WriteLine($"({request.Slot})    <-- Decided()");
 
                 return new DecideReply
                 {
                     // empty ?
                 };
-            }
         }
 
         /*
@@ -205,14 +211,14 @@ namespace Boney.Services
         * Communication between Boney and Boney
         */
 
-        public List<PromiseReply> SendPrepareRequest()
+        public List<PromiseReply> SendPrepareRequest(int slot)
         {
 
             Console.WriteLine($"Sending prepares with leader id {this.processId}");
 
             PrepareRequest prepareRequest = new PrepareRequest
             {
-                Slot = this.currentSlot,
+                Slot = slot,
                 LeaderId = this.processId
             };
 
@@ -243,13 +249,13 @@ namespace Boney.Services
             return promiseResponses;
         }
 
-        public List<AcceptedReply> SendAcceptRequest(int value)
+        public List<AcceptedReply> SendAcceptRequest(int slot, int value)
         {
             Console.WriteLine($"Sending accepts with leader id {this.processId}");
 
             AcceptRequest acceptRequest = new AcceptRequest
             {
-                Slot = this.currentSlot,
+                Slot = slot,
                 LeaderId = this.processId,
                 Value = value,
             };
@@ -282,14 +288,14 @@ namespace Boney.Services
             return acceptResponses;
         }
 
-        public void SendDecideRequest(int writeTimestamp, int value)
+        public void SendDecideRequest(int slot, int writeTimestamp, int value)
         {
 
             Console.WriteLine($"Sending decides with value {value}");
 
             DecideRequest decideRequest = new DecideRequest
             {
-                Slot = this.currentSlot,
+                Slot = slot,
                 WriteTimestamp = writeTimestamp,
                 Value = value
             };
@@ -321,13 +327,13 @@ namespace Boney.Services
 
         public CompareAndSwapReply WaitForPaxosToEnd(SlotData slot, CompareAndSwapRequest request)
         {
-            Console.WriteLine("Waiting for paxos to end.");
+            Console.WriteLine($"Waiting for paxos to end. - {Thread.CurrentThread.ManagedThreadId}");
             while (slot.IsPaxosRunning)
             {
                 // wait for paxos to end
             }
 
-            Console.WriteLine($"Paxos ended with value {slot.CurrentValue}");
+            Console.WriteLine($"Paxos ended with value {slot.CurrentValue} - {Thread.CurrentThread.ManagedThreadId}");
 
             return new CompareAndSwapReply
             {
@@ -352,9 +358,11 @@ namespace Boney.Services
 
             SlotData slot;
             bool needsToWait;
-            
+
+            Console.WriteLine($"Trying to lock (C&S) - {Thread.CurrentThread.ManagedThreadId}");
             lock (this)
             {
+                Console.WriteLine($"Locking... - {Thread.CurrentThread.ManagedThreadId}");
                 slot = this.slots[request.Slot];
                 Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
@@ -368,6 +376,7 @@ namespace Boney.Services
                     slot.IsPaxosRunning = true;
                 }
             }
+            Console.WriteLine($"Unlocking... - {Thread.CurrentThread.ManagedThreadId}");
 
             if (needsToWait)
             {
@@ -401,7 +410,7 @@ namespace Boney.Services
             }
 
             // Send prepare to all acceptors
-            List<PromiseReply> promiseResponses = SendPrepareRequest();
+            List<PromiseReply> promiseResponses = SendPrepareRequest(request.Slot);
 
             // Stop being leader if there is a more recent one
             foreach (var response in promiseResponses)
@@ -431,7 +440,7 @@ namespace Boney.Services
                 valueToPropose = slot.CompareAndSwapValue;
 
             // Send accept to all acceptors which will send decide to learners
-            List<AcceptedReply> acceptResponses = SendAcceptRequest(valueToPropose);
+            List<AcceptedReply> acceptResponses = SendAcceptRequest(request.Slot, valueToPropose);
 
             // Wait for learners to decide
             return WaitForPaxosToEnd(slot, request);

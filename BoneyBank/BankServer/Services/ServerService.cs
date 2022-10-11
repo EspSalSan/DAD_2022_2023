@@ -88,8 +88,14 @@ namespace BankServer.Services
                 Console.WriteLine($"Preparing slot {this.currentSlot}...");
                 
                 DoCompareAndSwap(this.currentSlot);
+
                 
-                if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[currentSlot] != this.primaryPerSlot[this.currentSlot-1])
+                while (this.primaryPerSlot.Count > 1 && !this.primaryPerSlot.ContainsKey(this.currentSlot - 1))
+                {
+                    // Wait for previous slot to finish consensus
+                }
+
+                if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[this.currentSlot] != this.primaryPerSlot[this.currentSlot-1])
                 {
                     Console.WriteLine("[NOT IMPLEMENTED] Leader has changed, starting cleanup...");
                     // TODO: Cleanup

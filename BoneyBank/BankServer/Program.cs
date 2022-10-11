@@ -76,13 +76,8 @@ namespace BankServer
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
             Console.WriteLine($"Working with {bankHosts.Count} banks and {boneyHosts.Count} boney processes");
 
-            // Setting timeSpan to 5 seconds from Now just for testing
-            TimeSpan timeSpan = DateTime.Now.TimeOfDay;
-            timeSpan += TimeSpan.FromSeconds(5);
-            timeSpan = startTime;
-
             // Starts thread in timeSpan
-            SetSlotTimer(timeSpan, slotDuration * 1000, serverService);
+            SetSlotTimer(startTime, slotDuration * 1000, serverService);
 
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

@@ -352,7 +352,7 @@ namespace Boney.Services
 
             while (this.isFrozen)
             {
-                // wait for slot to be unfrozen
+                // wait for process to be unfrozen
             }
 
 
@@ -366,7 +366,7 @@ namespace Boney.Services
                 slot = this.slots[request.Slot];
                 Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
-                needsToWait = !(slot.CompareAndSwapValue == -1 && slot.CurrentValue == -1);
+                needsToWait = slot.CompareAndSwapValue != -1 || slot.CurrentValue != -1;
                 // needs better names
                 // CompareAndSwapValue -> valor que foi trocado pelo banco
                 // CurrentValue -> Valor que foi decido pelo paxos
@@ -399,7 +399,7 @@ namespace Boney.Services
 
             if (leader == int.MaxValue)
             {
-                // TODO: All processes are frozen, what to do ?
+                // this should never happen, if process is running then he can be the leader  
             }
 
             Console.WriteLine($"Paxos Leader is {leader}");

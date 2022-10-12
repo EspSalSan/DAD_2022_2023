@@ -44,6 +44,7 @@ namespace Boney.Services
          */
         public void PrepareSlot()
         {
+            Monitor.Enter(this);
             if (this.currentSlot >= processFrozenPerSlot.Count)
             {
                 Console.WriteLine("Slot duration ended but no more slots to process.");
@@ -55,7 +56,7 @@ namespace Boney.Services
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
             this.currentSlot += 1;
-            
+
             Console.WriteLine($"Preparing slot {this.currentSlot}...");
 
             SlotData slot = new SlotData(this.currentSlot);
@@ -64,6 +65,8 @@ namespace Boney.Services
             // TODO é preciso fazer alguma coisa no Boney quando começa um slot ?
 
             Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
+            Monitor.PulseAll(this);
+            Monitor.Exit(this);
         }
 
         /*
@@ -73,55 +76,66 @@ namespace Boney.Services
 
         public PromiseReply PreparePaxos(PrepareRequest request)
         {
+
+            Monitor.Enter(this);
             while (!this.slots.ContainsKey(request.Slot))
             {
                 // wait for slot to be created
+                Console.WriteLine($"Waiting (slot creation)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             while (this.isFrozen)
             {
                 // wait for slot to be unfrozen
+                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             SlotData slot;
             PromiseReply reply;
 
-            Console.WriteLine($"Trying to lock (prepare) - {Thread.CurrentThread.ManagedThreadId}");
-            lock (this)
+
+            slot = this.slots[request.Slot];
+
+            if (slot.ReadTimestamp < request.LeaderId)
             {
-                Console.WriteLine($"Locking... - {Thread.CurrentThread.ManagedThreadId}");
-                slot = this.slots[request.Slot];
-                
-                if (slot.ReadTimestamp < request.LeaderId)
-                {
-                    slot.ReadTimestamp = request.LeaderId;
-                }
-
-                reply = new PromiseReply
-                {
-                    Slot = request.Slot,
-                    ReadTimestamp = slot.ReadTimestamp,
-                    Value = slot.CompareAndSwapValue,
-                };
-
-                Console.WriteLine($"({request.Slot})--> Prepare({request.LeaderId})");
-                Console.WriteLine($"({request.Slot})    <-- Promise({slot.ReadTimestamp},{slot.CompareAndSwapValue})");
+                slot.ReadTimestamp = request.LeaderId;
             }
-            Console.WriteLine($"Unocking... - {Thread.CurrentThread.ManagedThreadId}");
 
+            reply = new PromiseReply
+            {
+                Slot = request.Slot,
+                ReadTimestamp = slot.ReadTimestamp,
+                Value = slot.CompareAndSwapValue,
+            };
+
+            Console.WriteLine($"({request.Slot})--> Prepare({request.LeaderId})");
+            Console.WriteLine($"({request.Slot})    <-- Promise({slot.ReadTimestamp},{slot.CompareAndSwapValue})");
+
+            Monitor.Exit(this);
             return reply;
         }
 
         public AcceptedReply AcceptPaxos(AcceptRequest request)
         {
+            Monitor.Enter(this);
             while (!this.slots.ContainsKey(request.Slot))
             {
                 // wait for slot to be created
+                Console.WriteLine($"Waiting (slot creation)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             while (this.isFrozen)
             {
                 // wait for slot to be unfrozen
+                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             SlotData slot = this.slots[request.Slot];
@@ -139,71 +153,76 @@ namespace Boney.Services
 
             Console.WriteLine($"({request.Slot})    <-- Accepted({slot.WriteTimestamp},{slot.CompareAndSwapValue})");
 
-            return new AcceptedReply
+            AcceptedReply reply = new AcceptedReply
             {
                 Slot = request.Slot,
                 WriteTimestamp = slot.WriteTimestamp,
                 Value = slot.CompareAndSwapValue,
             };
+
+            Monitor.Exit(this);
+            return reply;
         }
 
         public DecideReply DecidePaxos(DecideRequest request)
         {
+            Monitor.Enter(this);
             while (!this.slots.ContainsKey(request.Slot))
             {
                 // wait for slot to be created
+                Console.WriteLine($"Waiting (slot creation)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             while (this.isFrozen)
             {
                 // wait for slot to be unfrozen
+                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");//
             }
 
             SlotData slot = this.slots[request.Slot];
 
             Console.WriteLine($"({request.Slot})--> Decide({request.WriteTimestamp},{request.Value})");
 
-            Console.WriteLine($"Trying to lock (decide) - {Thread.CurrentThread.ManagedThreadId}");
-            lock (slot)
+            slot.DecidedReceived.Add((request.WriteTimestamp, request.Value));
+
+            int majority = this.boneyHosts.Count / 2 + 1;
+
+            Dictionary<(int, int), int> received = new Dictionary<(int, int), int>();
+            foreach (var entry in slot.DecidedReceived)
             {
-                Console.WriteLine($"Locking... - {Thread.CurrentThread.ManagedThreadId}");
-                slot.DecidedReceived.Add((request.WriteTimestamp, request.Value));
-
-                int majority = this.boneyHosts.Count / 2 + 1;
-
-                Dictionary<(int, int), int> received = new Dictionary<(int, int), int>();
-                foreach (var entry in slot.DecidedReceived)
+                if (received.ContainsKey(entry))
                 {
-                    if (received.ContainsKey(entry))
-                    {
-                        received[entry]++;
-                    }
-                    else
-                    {
-                        received.Add(entry, 1);
-                    }
+                    received[entry]++;
                 }
-                foreach (KeyValuePair<(int, int), int> kvp in received)
+                else
                 {
-                    // Learners have received a majority of accepted() with the same value
-                    // Therefore the paxos has reached a consensus
-                    if (kvp.Value >= majority)
-                    {
-                        slot.CurrentValue = kvp.Key.Item2;
-                        slot.IsPaxosRunning = false;
-                    }
+                    received.Add(entry, 1);
                 }
             }
-            Console.WriteLine($"Unlocking... - {Thread.CurrentThread.ManagedThreadId}");
+            foreach (KeyValuePair<(int, int), int> kvp in received)
+            {
+                // Learners have received a majority of accepted() with the same value
+                // Therefore the paxos has reached a consensus
+                if (kvp.Value >= majority)
+                {
+                    slot.CurrentValue = kvp.Key.Item2;
+                    slot.IsPaxosRunning = false;
+                    Monitor.PulseAll(this);
+                }
+            }
             // USEFULL TO PRINT DICTIONARIES
             //received.Select(i => $"{i.Key}: {i.Value}").ToList().ForEach(Console.WriteLine);
 
             Console.WriteLine($"({request.Slot})    <-- Decided()");
-
-                return new DecideReply
-                {
-                    // empty ?
-                };
+            Monitor.Exit(this);
+            return new DecideReply
+            {
+                // empty ?
+            };
         }
 
         /*
@@ -214,7 +233,7 @@ namespace Boney.Services
         public List<PromiseReply> SendPrepareRequest(int slot)
         {
 
-            Console.WriteLine($"Sending prepares with leader id {this.processId}");
+            //Console.WriteLine($"Sending prepares with leader id {this.processId}");
 
             PrepareRequest prepareRequest = new PrepareRequest
             {
@@ -251,7 +270,7 @@ namespace Boney.Services
 
         public List<AcceptedReply> SendAcceptRequest(int slot, int value)
         {
-            Console.WriteLine($"Sending accepts with leader id {this.processId}");
+            //Console.WriteLine($"Sending accepts with leader id {this.processId}");
 
             AcceptRequest acceptRequest = new AcceptRequest
             {
@@ -327,56 +346,61 @@ namespace Boney.Services
 
         public CompareAndSwapReply WaitForPaxosToEnd(SlotData slot, CompareAndSwapRequest request)
         {
-            Console.WriteLine($"Waiting for paxos to end. - {Thread.CurrentThread.ManagedThreadId}");
+            //Console.WriteLine($"Waiting for paxos to end. - {Thread.CurrentThread.ManagedThreadId}");
             while (slot.IsPaxosRunning)
             {
                 // wait for paxos to end
+                Console.WriteLine($"Waiting (paxos to end)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             Console.WriteLine($"Paxos ended with value {slot.CurrentValue} - {Thread.CurrentThread.ManagedThreadId}");
-
-            return new CompareAndSwapReply
+            CompareAndSwapReply reply = new CompareAndSwapReply
             {
                 Slot = request.Slot,
                 Outvalue = slot.CurrentValue,
             };
+
+            Monitor.Exit(this);
+            return reply;
         }
 
         public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
         {
-
+            Monitor.Enter(this);
             while (!this.slots.ContainsKey(request.Slot))
             {
                 // wait for slot to be created
+                Console.WriteLine($"Waiting (slot creation)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             while (this.isFrozen)
             {
                 // wait for process to be unfrozen
+                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
 
             SlotData slot;
             bool needsToWait;
 
-            Console.WriteLine($"Trying to lock (C&S) - {Thread.CurrentThread.ManagedThreadId}");
-            lock (this)
-            {
-                Console.WriteLine($"Locking... - {Thread.CurrentThread.ManagedThreadId}");
-                slot = this.slots[request.Slot];
-                Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
+            slot = this.slots[request.Slot];
+            Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
-                needsToWait = slot.CompareAndSwapValue != -1 || slot.CurrentValue != -1;
-                // needs better names
-                // CompareAndSwapValue -> valor que foi trocado pelo banco
-                // CurrentValue -> Valor que foi decido pelo paxos
-                if (!needsToWait)
-                {
-                    slot.CompareAndSwapValue = request.Invalue;
-                    slot.IsPaxosRunning = true;
-                }
+            needsToWait = slot.CompareAndSwapValue != -1 || slot.CurrentValue != -1;
+            // needs better names
+            // CompareAndSwapValue -> valor que foi trocado pelo banco
+            // CurrentValue -> Valor que foi decido pelo paxos
+            if (!needsToWait)
+            {
+                slot.CompareAndSwapValue = request.Invalue;
+                slot.IsPaxosRunning = true;
             }
-            Console.WriteLine($"Unlocking... - {Thread.CurrentThread.ManagedThreadId}");
 
             if (needsToWait)
             {
@@ -409,16 +433,18 @@ namespace Boney.Services
                 return WaitForPaxosToEnd(slot, request);
             }
 
+            Monitor.Exit(this);
+
             // Send prepare to all acceptors
             List<PromiseReply> promiseResponses = SendPrepareRequest(request.Slot);
-
+            Monitor.Enter(this);
             // Stop being leader if there is a more recent one
             foreach (var response in promiseResponses)
             {
                 //if (response.ReadTimestamp > slot.ReadTimestamp)
                 if (response.ReadTimestamp > this.processId)
                 {
-                    Console.WriteLine($"{this.processId} KILL SELF");
+                    //Console.WriteLine($"{this.processId} KILL SELF");
                     return WaitForPaxosToEnd(slot, request);
                 }
             }
@@ -439,9 +465,10 @@ namespace Boney.Services
             if (valueToPropose == -1)
                 valueToPropose = slot.CompareAndSwapValue;
 
+            Monitor.Exit(this);
             // Send accept to all acceptors which will send decide to learners
             List<AcceptedReply> acceptResponses = SendAcceptRequest(request.Slot, valueToPropose);
-
+            Monitor.Enter(this);
             // Wait for learners to decide
             return WaitForPaxosToEnd(slot, request);
         }

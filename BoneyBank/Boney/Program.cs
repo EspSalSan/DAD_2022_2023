@@ -20,9 +20,10 @@ namespace Boney
                 Environment.Exit(0);
                 return;
             }
-
+            Console.WriteLine($"Time to go {timeToGo}");
             new System.Threading.Timer(x =>
             {
+                Console.WriteLine($"Start");
                 serverService.PrepareSlot();
             }, null, (int)timeToGo.TotalMilliseconds, slotDuration);
         }

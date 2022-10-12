@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BankServer.Services
@@ -61,6 +62,7 @@ namespace BankServer.Services
              * (maybe) send them to the listOfPending (if the leader is another)
              */
 
+            Monitor.Enter(this);
             if (this.totalSlots >= processFrozenPerSlot.Count)
             {
                 Console.WriteLine("Slot duration ended but no more slots to process.");
@@ -76,6 +78,7 @@ namespace BankServer.Services
 
             if (this.isFrozen)
             {
+                Monitor.Exit(this);
                 return;
             }
 
@@ -93,6 +96,7 @@ namespace BankServer.Services
                 while (this.primaryPerSlot.Count > 1 && !this.primaryPerSlot.ContainsKey(this.currentSlot - 1))
                 {
                     // Wait for previous slot to finish consensus
+                    Monitor.Wait(this);
                 }
 
                 if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[this.currentSlot] != this.primaryPerSlot[this.currentSlot-1])
@@ -102,6 +106,8 @@ namespace BankServer.Services
                 }
 
             }
+            Monitor.PulseAll(this);
+            Monitor.Exit(this);
             Console.WriteLine("Preparation ended.");
         }
 
@@ -113,9 +119,11 @@ namespace BankServer.Services
 
         public DepositReply DepositMoney(DepositRequest request)
         {
+            Monitor.Enter(this);
             while (this.isFrozen)
             {
                 // wait until not frozen
+                Monitor.Wait(this);
             }
             
             Console.WriteLine($"Deposit request ({request.Value}) from {request.ClientId}");
@@ -125,34 +133,38 @@ namespace BankServer.Services
                 Start2PC(ref request);
             }
 
-            lock (this)
-            {
+
                 if (this.processId == this.primaryPerSlot[this.currentSlot])
                 {
-                    return new DepositReply
+                    DepositReply reply = new DepositReply
                     {
                         Balance = this.balance += request.Value,
                         Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
+                    Monitor.Exit(this);
+                    return reply;
                 }
                 else
                 {
-                    return new DepositReply
+                    DepositReply reply = new DepositReply
                     {
                         Balance = this.balance,
                         Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
+                    Monitor.Exit(this);
+                    return reply;
                 }
 
-            }
 
         }
 
         public WithdrawReply WithdrawMoney(WithdrawRequest request)
         {
+            Monitor.Enter(this);
             while (this.isFrozen)
             {
                 // wait until not frozen
+                Monitor.Wait(this);
             }
             
             Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
@@ -166,21 +178,25 @@ namespace BankServer.Services
             {
                 if (this.processId == this.primaryPerSlot[this.currentSlot])
                 {
-                    return new WithdrawReply
+                    WithdrawReply reply = new WithdrawReply
                     {
                         Value = request.Value > this.balance ? 0 : request.Value,
                         Balance = request.Value > this.balance ?  this.balance : (this.balance -= request.Value),
                         Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
+                    Monitor.Exit(this);
+                    return reply;
                 }
                 else
                 {
-                    return new WithdrawReply
+                    WithdrawReply reply = new WithdrawReply
                     {
                         Value = request.Value,
                         Balance = this.balance,
                         Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
                     };
+                    Monitor.Exit(this);
+                    return reply;
                 }
 
             }
@@ -188,9 +204,11 @@ namespace BankServer.Services
 
         public ReadReply ReadBalance(ReadRequest request)
         {
+            Monitor.Enter(this);
             while (this.isFrozen)
             {
                 // wait until not frozen
+                Monitor.Wait(this);
             }
             
             if (this.processId == this.primaryPerSlot[this.currentSlot])
@@ -199,11 +217,14 @@ namespace BankServer.Services
             }
 
             Console.WriteLine($"Read request from {request.ClientId}");
-            return new ReadReply
+            ReadReply reply = new ReadReply
             {
                 Balance = balance,
                 Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
             };
+
+            Monitor.Exit(this);
+            return reply;
         }
 
         /*
@@ -494,8 +515,9 @@ namespace BankServer.Services
             }
 
             this.primaryPerSlot.Add(slot, electedPrimary);
+            Monitor.PulseAll(this);
 
-            Console.WriteLine($"Process {electedPrimary} is the primary for slot {slot}.");
+            Console.WriteLine($"-----------------------------\r\nProcess {electedPrimary} is the primary for slot {slot}.\r\n-----------------------------");
         }
         
         public int SendCompareAndSwapRequest(int primary, int slot)

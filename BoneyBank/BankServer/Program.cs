@@ -21,6 +21,7 @@ namespace BankServer
                 return;
             }
 
+            // A thread will be created at timeToGo and after that, every slotDuration
             new System.Threading.Timer(x =>
             {
                 serverService.PrepareSlot();
@@ -39,6 +40,7 @@ namespace BankServer
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
 
+            // Process data from config file to send to serverService
             int numberOfProcesses = config.NumberOfProcesses;
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
             Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(

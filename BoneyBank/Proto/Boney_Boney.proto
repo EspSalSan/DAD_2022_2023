@@ -1,9 +1,9 @@
 syntax = "proto3";
 
 service Paxos {
-  rpc Prepare(PrepareRequest) returns (PromiseReply);
-  rpc Accept(AcceptRequest) returns (AcceptedReply);
-  rpc Decide(DecideRequest) returns (DecideReply);
+  rpc Prepare(PrepareRequest)   returns (PromiseReply);
+  rpc Accept(AcceptRequest)     returns (AcceptedReply);
+  rpc Decide(DecideRequest)     returns (DecideReply);
 }
 
 message PrepareRequest {
@@ -33,5 +33,4 @@ message DecideRequest {
     int32 value = 3;
 }
 message DecideReply {
-    // empty?
 }

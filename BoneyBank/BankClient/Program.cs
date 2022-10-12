@@ -45,7 +45,6 @@ namespace BankClient
                        Console.WriteLine(
                            $"Balance {depositReply.Balance} ({(depositReply.Primary ? "primary" : "secondary")})"
                        );
-
                    }
                    catch (Grpc.Core.RpcException e)
                    {
@@ -170,6 +169,7 @@ namespace BankClient
             int clientSequenceNumber = 0;
 
             Console.WriteLine($"Bank Client ({processId})");
+            Console.WriteLine($"It's functional but not yet completed.");
 
             while (true) {
 

@@ -6,11 +6,9 @@ P 5 bank http://localhost:10008
 P 6 bank http://localhost:10009
 P 7 client
 P 8 client
-S 5
-T 12:45:00
+S 3
+T 16:41:00
 D 20
-F 1 (1, N, S) (2, N, S) (3, N, S) (4, N, S) (5, N, S) (6, N, S)
+F 1 (1, N, NS) (2, N, NS) (3, N, NS) (4, F, S) (5, N, NS) (6, N, NS)
 F 2 (1, F, S) (2, F, S) (3, F, S) (4, N, NS) (5, N, NS) (6, N, NS)
-F 3 (1, N, NS) (2, N, NS) (3, N, NS) (4, F, NS) (5, N, NS) (6, F, NS)
-F 4 (1, N, NS) (2, F, NS) (3, F, NS) (4, F, S) (5, F, NS) (6, N, NS)
-F 5 (1, N, S) (2, N, S) (3, N, S) (4, N, S) (5, N, S) (6, N, S)
+F 3 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS)

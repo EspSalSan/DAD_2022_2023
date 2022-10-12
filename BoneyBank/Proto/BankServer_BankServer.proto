@@ -2,10 +2,11 @@ syntax = "proto3";
 
 service TwoPhaseCommit {
 	rpc Tentative(TentativeRequest) returns (TentativeReply);
-	rpc Commit(CommitRequest) returns (CommitReply);
+	rpc Commit(CommitRequest)		returns (CommitReply);
 }
 
-// TODO: Do we need to send this ?
+// TODO: 2PC is still unfinished
+// Do we need to send this ?
 // Secondary bank processes must update their balancce somehow
 enum ClientAction {
 	DEPOSIT = 0;
@@ -42,7 +43,6 @@ service Cleanup {
 message ListPendingRequestsRequest {
 	int32 lastKnownSequenceNumber = 1;
 }
-
 message ListPendingRequestsReply{
 	// Empty ?
 }

@@ -20,10 +20,10 @@ namespace Boney
                 Environment.Exit(0);
                 return;
             }
-            Console.WriteLine($"Time to go {timeToGo}");
+
+            // A thread will be created at timeToGo and after that, every slotDuration
             new System.Threading.Timer(x =>
             {
-                Console.WriteLine($"Start");
                 serverService.PrepareSlot();
             }, null, (int)timeToGo.TotalMilliseconds, slotDuration);
         }
@@ -40,6 +40,7 @@ namespace Boney
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
 
+            // Process data from config file to send to serverService
             int numberOfProcesses = config.NumberOfProcesses;
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
             Dictionary<int, Paxos.PaxosClient> boneyHosts = config.BoneyServers.ToDictionary(

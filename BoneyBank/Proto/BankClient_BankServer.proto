@@ -2,11 +2,10 @@ syntax = "proto3";
 
 service Bank {
   rpc Deposit   (DepositRequest)	returns (DepositReply);
-  rpc Withdraw  (WithdrawRequest) returns (WithdrawReply);
-  rpc Read      (ReadRequest)			returns (ReadReply);
+  rpc Withdraw  (WithdrawRequest)	returns (WithdrawReply);
+  rpc Read      (ReadRequest)		returns (ReadReply);
 }
 
-// TODO: Send bankSequenceNumber in the reply (may be useful)
 message DepositRequest {
 	int32 clientId = 1;
 	int32 clientSequenceNumber = 2;

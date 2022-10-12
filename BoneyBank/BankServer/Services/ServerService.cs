@@ -7,8 +7,6 @@ namespace BankServer.Services
 {
     public class ServerService
     {
-        // TODO: Should we create a SlotData just like in Boney ?
-
         // Config file variables
         private readonly int processId;
         private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
@@ -17,13 +15,12 @@ namespace BankServer.Services
         private readonly Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts;
 
         // Changing variables
-        private int totalSlots;
-        private int currentSlot;
-        private bool isFrozen;
         private int balance;
-        // private Dictionary<int, int> lastKnownSequenceNumber;
+        private bool isFrozen;
+        private int totalSlots;   // The number of total slots elapsed since the beginning of the program
+        private int currentSlot;  // The number of experienced slots (process may be frozen and not experience all slots)
         private int currentSequenceNumber;
-        private Dictionary<int,int> primaryPerSlot;
+        private readonly Dictionary<int,int> primaryPerSlot;
 
         public ServerService(
             int processId,
@@ -39,20 +36,26 @@ namespace BankServer.Services
             this.bankHosts = bankHosts;
             this.boneyHosts = boneyHosts;
 
-            this.currentSlot = 0;
-            this.isFrozen = false;
             this.balance = 0;
+            this.isFrozen = false;
+            this.totalSlots = 0;
+            this.currentSlot = 0;
             this.currentSequenceNumber = 0;
             this.primaryPerSlot = new Dictionary<int,int>();
         }
 
         /*
-         * Prepare Slot
-         * TODO: Description
+         * At the start of every slot this function is called to "prepare the slot".
+         * Updates process state (frozen or not).
+         * If there is missing history regarding previous primaries, calls CompareAndSwap for each missing slot.
+         * Electes a primary process for the current slot.
+         * Does Cleanup if leader changes.
          */
         public void PrepareSlot()
         {
             /*
+             * TODO: How to handle client requests (2PC, sequence numbers, etc)
+             * IDEIAS:
              * somehow make process stop processing requeste
              * when the slot ends:
              * if there are requests pending (and is current leader), they go to the next slot
@@ -73,7 +76,6 @@ namespace BankServer.Services
             this.isFrozen = this.processFrozenPerSlot[totalSlots];
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
-            // Global slot counter
             this.totalSlots++;
 
             if (this.isFrozen)
@@ -92,29 +94,21 @@ namespace BankServer.Services
                 
                 DoCompareAndSwap(this.currentSlot);
 
-                
-                while (this.primaryPerSlot.Count > 1 && !this.primaryPerSlot.ContainsKey(this.currentSlot - 1))
-                {
-                    // Wait for previous slot to finish consensus
-                    Monitor.Wait(this);
-                }
-
                 if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[this.currentSlot] != this.primaryPerSlot[this.currentSlot-1])
                 {
                     Console.WriteLine("[NOT IMPLEMENTED] Leader has changed, starting cleanup...");
                     // TODO: Cleanup
                 }
 
+                Console.WriteLine("Preparation ended.");
             }
             Monitor.PulseAll(this);
             Monitor.Exit(this);
-            Console.WriteLine("Preparation ended.");
         }
 
         /*
          * Bank Service (Server) Implementation
          * Communication between BankClient and BankServer
-         * TODO: Do they need locks?
          */
 
         public DepositReply DepositMoney(DepositRequest request)
@@ -122,7 +116,6 @@ namespace BankServer.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                // wait until not frozen
                 Monitor.Wait(this);
             }
             
@@ -130,32 +123,29 @@ namespace BankServer.Services
 
             if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
-                Start2PC(ref request);
+                Start2PC(ref request);  // TODO: Work in progress
             }
 
-
-                if (this.processId == this.primaryPerSlot[this.currentSlot])
+            DepositReply reply; 
+            if (this.processId == this.primaryPerSlot[this.currentSlot])
+            {
+                reply = new DepositReply
                 {
-                    DepositReply reply = new DepositReply
-                    {
-                        Balance = this.balance += request.Value,
-                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
-                    };
-                    Monitor.Exit(this);
-                    return reply;
-                }
-                else
+                    Balance = this.balance += request.Value,
+                    Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
+                };
+            }
+            else
+            {
+                reply = new DepositReply
                 {
-                    DepositReply reply = new DepositReply
-                    {
-                        Balance = this.balance,
-                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
-                    };
-                    Monitor.Exit(this);
-                    return reply;
-                }
-
-
+                    Balance = this.balance,
+                    Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
+                };
+            }
+            
+            Monitor.Exit(this);
+            return reply;
         }
 
         public WithdrawReply WithdrawMoney(WithdrawRequest request)
@@ -163,43 +153,38 @@ namespace BankServer.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                // wait until not frozen
-                Monitor.Wait(this);
+                Monitor.Wait(this);  // wait until not frozen
             }
             
             Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
 
             if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
-                Start2PC(ref request);
+                Start2PC(ref request);  // TODO: Work in progress
             }
 
-            lock (this)
+            WithdrawReply reply;
+            if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
-                if (this.processId == this.primaryPerSlot[this.currentSlot])
+                reply = new WithdrawReply
                 {
-                    WithdrawReply reply = new WithdrawReply
-                    {
-                        Value = request.Value > this.balance ? 0 : request.Value,
-                        Balance = request.Value > this.balance ?  this.balance : (this.balance -= request.Value),
-                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
-                    };
-                    Monitor.Exit(this);
-                    return reply;
-                }
-                else
-                {
-                    WithdrawReply reply = new WithdrawReply
-                    {
-                        Value = request.Value,
-                        Balance = this.balance,
-                        Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
-                    };
-                    Monitor.Exit(this);
-                    return reply;
-                }
-
+                    Value = request.Value > this.balance ? 0 : request.Value,
+                    Balance = request.Value > this.balance ?  this.balance : (this.balance -= request.Value),
+                    Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
+                };
             }
+            else
+            {
+                reply = new WithdrawReply
+                {
+                    Value = request.Value,
+                    Balance = this.balance,
+                    Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
+                };
+            }
+            
+            Monitor.Exit(this);
+            return reply;
         }
 
         public ReadReply ReadBalance(ReadRequest request)
@@ -213,7 +198,7 @@ namespace BankServer.Services
             
             if (this.processId == this.primaryPerSlot[this.currentSlot])
             {
-                //Start2PC(ref request);
+                //Start2PC(ref request); // TODO: Work in progress
             }
 
             Console.WriteLine($"Read request from {request.ClientId}");
@@ -230,6 +215,7 @@ namespace BankServer.Services
         /*
          * Two Phase Commit Service (Server) Implementation
          * Communication between BankServer and BankServer
+         * TODO: Work in progress
          */
 
         public TentativeReply Tentative(TentativeRequest request)
@@ -286,6 +272,7 @@ namespace BankServer.Services
         /*
          * Two Phase Commit Service (Client) Implementation
          * Communication between BankServer and BankServer
+         * TODO: Work in progress
          */
 
         public void Start2PC<T>(ref T request)
@@ -437,6 +424,7 @@ namespace BankServer.Services
         /*
          * Cleanup Service (Server) Implementation
          * Communication between BankServer and BankServer
+         * TODO: Work in progress
          */
 
         public ListPendingRequestsReply Cleanup(ListPendingRequestsRequest request)
@@ -465,21 +453,19 @@ namespace BankServer.Services
              * Comandos commited
              */
             
-            // TODO
             return new ListPendingRequestsReply
             {
-
             };
         }
 
         /*
          * Cleanup Service (Client) Implementation
          * Communication between BankServer and BankServer
+         * TODO: Work in progress
          */
 
         public void SendCleanupRequest()
         {
-            // TODO
         }
 
         /*
@@ -499,14 +485,12 @@ namespace BankServer.Services
 
             if (primary == int.MaxValue)
             {
+                // TODO: Guardar como lider do slot N o lider do slot N-1 ?
                 Console.WriteLine("No process is valid for leader election.");
+                Console.WriteLine("No progress is going to be made in this slot.");
                 return;
-                // TODO: What to do when all processes are frozen ?
             }
 
-            // BIG TODO: If someone is frozen and CAP doesnt work, the leader for that slot
-            // is the same leader as the slot before
-            // THIS NEEDS TIMEOUTS when waiting for the replies
             int electedPrimary = SendCompareAndSwapRequest(primary, slot);
 
             if (electedPrimary == -1)
@@ -530,7 +514,7 @@ namespace BankServer.Services
                 Invalue = primary,
             };
 
-            Console.WriteLine($"Trying to elect process {primary} as primary.");
+            Console.WriteLine($"Trying to elect process {primary} as primary for slot {slot}.");
 
             // Send request to all boney processes
             List<Task> tasks = new List<Task>();

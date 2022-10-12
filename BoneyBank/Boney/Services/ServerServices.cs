@@ -10,7 +10,7 @@ namespace Boney.Services
     public class ServerService
     {
         // Config file variables
-        private readonly int processId;
+        private int processId;
         private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
         private readonly List<bool> processFrozenPerSlot;
         private readonly Dictionary<int, Paxos.PaxosClient> boneyHosts;
@@ -38,11 +38,7 @@ namespace Boney.Services
             this.slots = new ConcurrentDictionary<int, SlotData>();
             // Initialize slots
             for (int i = 1; i <= processFrozenPerSlot.Count; i++)
-            {
-                
-                bool result = this.slots.TryAdd(i, new SlotData(i));
-                Console.WriteLine($"Created slot {i} with result: {result}");
-            }
+                this.slots.TryAdd(i, new SlotData(i));
         }
 
         /*
@@ -61,11 +57,14 @@ namespace Boney.Services
 
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot];
+            Monitor.PulseAll(this);
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
             this.currentSlot += 1;
 
-            Monitor.PulseAll(this);
+            // TODO: increase processId by this.boneyHosts.Count
+            this.processId += this.boneyHosts.Count;
+
             Monitor.Exit(this);
         }
 
@@ -76,7 +75,6 @@ namespace Boney.Services
 
         public PromiseReply PreparePaxos(PrepareRequest request)
         {
-
             Monitor.Enter(this);
             while (this.isFrozen)
             {
@@ -300,54 +298,47 @@ namespace Boney.Services
          * Communication between Bank and Boney
          */
 
-        public CompareAndSwapReply WaitForPaxosToEnd(SlotData slot, CompareAndSwapRequest request)
+        public bool WaitForPaxos(SlotData slot, CompareAndSwapRequest request)
         {
+            bool success = true;
             while (slot.IsPaxosRunning)
             {
                 // wait for paxos to end
                 Console.WriteLine($"Waiting (paxos to end)... - {Thread.CurrentThread.ManagedThreadId}");
                 Monitor.Wait(this);
                 Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
+
+                // Slot ended without reaching consensus
+                // Do paxos again with another configuration
+                if (this.currentSlot > slot.Slot && slot.DecidedValue == -1)
+                {
+                    Console.WriteLine("SLOT ACABOU SEM PAXOS VOU COMECAR UM NOVO");
+                    success = false;
+                    break;
+                }
             }
-
-            Console.WriteLine($"Paxos ended with value {slot.DecidedValue} - {Thread.CurrentThread.ManagedThreadId}");
-            CompareAndSwapReply reply = new CompareAndSwapReply
-            {
-                Slot = request.Slot,
-                Outvalue = slot.DecidedValue,
-            };
-
-            Monitor.Exit(this);
-            return reply;
+            return success;
         }
 
-        public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
+        public bool DoPaxos(CompareAndSwapRequest request)
         {
-            Monitor.Enter(this);
-            while (this.isFrozen)
-            {
-                // wait for process to be unfrozen
-                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
-                Monitor.Wait(this);
-                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
-            }
-
             SlotData slot = this.slots[request.Slot];
-        
-            Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
-            if (slot.WrittenValue == -1 && slot.DecidedValue == -1)
+            // !(slot.WrittenValue != -1 || slot.DecidedValue != -1)
+
+            //if (slot.WrittenValue == -1 && slot.DecidedValue == -1)
+            if (!slot.IsPaxosRunning)
             {
-                slot.WrittenValue = request.Invalue;
+                if(slot.WrittenValue == -1)
+                    slot.WrittenValue = request.Invalue;
+                
                 slot.IsPaxosRunning = true;
             }
             else
             {
-                return WaitForPaxosToEnd(slot, request);
+                return WaitForPaxos(slot, request);
             }
-
-            Console.WriteLine("Starting Paxos...");
-
+            
             // Compute paxos leader (lowest id with NS)
             // Select new leader
             Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
@@ -366,9 +357,10 @@ namespace Boney.Services
 
             Console.WriteLine($"Paxos Leader is {leader}");
 
-            if (this.processId != leader)
+            // 'leader' comes from config, doesnt account for increase in processId
+            if (this.processId%3 != leader)
             {
-                return WaitForPaxosToEnd(slot, request);
+                return WaitForPaxos(slot, request);
             }
 
             Monitor.Exit(this);
@@ -380,7 +372,7 @@ namespace Boney.Services
             foreach (var response in promiseResponses)
             {
                 if (response.ReadTimestamp > this.processId)
-                    return WaitForPaxosToEnd(slot, request);
+                    return WaitForPaxos(slot, request);
             }
 
             // Get values from promises
@@ -402,10 +394,46 @@ namespace Boney.Services
             Monitor.Exit(this);
             // Send accept to all acceptors which will send decide to learners
             SendAcceptRequest(request.Slot, valueToPropose);
-            
+
             Monitor.Enter(this);
             // Wait for learners to decide
-            return WaitForPaxosToEnd(slot, request);
+            return WaitForPaxos(slot, request);
+        }
+
+        public CompareAndSwapReply CompareAndSwap(CompareAndSwapRequest request)
+        {
+            Monitor.Enter(this);
+            while (this.isFrozen)
+            {
+                // wait for process to be unfrozen
+                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
+                Monitor.Wait(this);
+                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
+            }
+
+            SlotData slot = this.slots[request.Slot];
+        
+            Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
+
+            Console.WriteLine("Starting Paxos...");
+            
+            while (!DoPaxos(request))
+            {
+                slot.IsPaxosRunning = false;
+                Console.WriteLine("VOU CORRER OUTRO PAXOS");
+            }
+            
+            Console.WriteLine("Paxos terminou");
+            Monitor.Exit(this);
+
+            Console.WriteLine($"Paxos ended with value {slot.DecidedValue} - {Thread.CurrentThread.ManagedThreadId}");
+            CompareAndSwapReply reply = new CompareAndSwapReply
+            {
+                Slot = request.Slot,
+                Outvalue = slot.DecidedValue,
+            };
+
+            return reply;
         }
     }
 }

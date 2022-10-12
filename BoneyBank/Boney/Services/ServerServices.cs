@@ -142,7 +142,7 @@ namespace Boney.Services
 
             Console.WriteLine($"({request.Slot})--> Accept({request.LeaderId}, {request.Value})");
 
-            if (slot.WriteTimestamp < request.LeaderId)
+            if (slot.ReadTimestamp == request.LeaderId)
             {
                 slot.WriteTimestamp = request.LeaderId;
                 slot.CompareAndSwapValue = request.Value;

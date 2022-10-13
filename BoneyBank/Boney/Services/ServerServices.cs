@@ -193,12 +193,12 @@ namespace Boney.Services
         * Communication between Boney and Boney
         */
 
-        public List<PromiseReply> SendPrepareRequest(int slot)
+        public List<PromiseReply> SendPrepareRequest(int slot, int leaderId)
         {
             PrepareRequest prepareRequest = new PrepareRequest
             {
                 Slot = slot,
-                LeaderId = this.processId
+                LeaderId = leaderId
             };
 
             List<PromiseReply> promiseResponses = new List<PromiseReply>();
@@ -228,12 +228,12 @@ namespace Boney.Services
             return promiseResponses;
         }
 
-        public List<AcceptedReply> SendAcceptRequest(int slot, int value)
+        public List<AcceptedReply> SendAcceptRequest(int slot, int leaderId, int value)
         {
             AcceptRequest acceptRequest = new AcceptRequest
             {
                 Slot = slot,
-                LeaderId = this.processId,
+                LeaderId = leaderId,
                 Value = value,
             };
 
@@ -267,6 +267,7 @@ namespace Boney.Services
 
         public void SendDecideRequest(int slot, int writeTimestamp, int value)
         {
+
             DecideRequest decideRequest = new DecideRequest
             {
                 Slot = slot,
@@ -327,7 +328,7 @@ namespace Boney.Services
             // !(slot.WrittenValue != -1 || slot.DecidedValue != -1)
 
             //if (slot.WrittenValue == -1 && slot.DecidedValue == -1)
-            if (!slot.IsPaxosRunning)
+            if (!slot.IsPaxosRunning && slot.DecidedValue == -1)
             {
                 if(slot.WrittenValue == -1)
                     slot.WrittenValue = request.Invalue;
@@ -354,9 +355,10 @@ namespace Boney.Services
             {
                 // this should never happen, if process is running then he can be the leader  
             }
-
+            
             Console.WriteLine($"Paxos Leader is {leader}");
 
+            int leaderCurrentId = this.processId;
             // 'leader' comes from config, doesnt account for increase in processId
             if (this.processId%3 != leader)
             {
@@ -366,7 +368,7 @@ namespace Boney.Services
             Monitor.Exit(this);
 
             // Send prepare to all acceptors
-            List<PromiseReply> promiseResponses = SendPrepareRequest(request.Slot);
+            List<PromiseReply> promiseResponses = SendPrepareRequest(request.Slot, leaderCurrentId);
             Monitor.Enter(this);
             // Stop being leader if there is a more recent one
             foreach (var response in promiseResponses)
@@ -393,7 +395,7 @@ namespace Boney.Services
 
             Monitor.Exit(this);
             // Send accept to all acceptors which will send decide to learners
-            SendAcceptRequest(request.Slot, valueToPropose);
+            SendAcceptRequest(request.Slot, leaderCurrentId, valueToPropose);
 
             Monitor.Enter(this);
             // Wait for learners to decide

@@ -1,4 +1,5 @@
 ﻿using Boney.Domain;
+using Google.Protobuf.WellKnownTypes;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,13 +12,13 @@ namespace Boney.Services
     {
         // Config file variables
         private int processId;
-        private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
         private readonly List<bool> processFrozenPerSlot;
         private readonly Dictionary<int, Paxos.PaxosClient> boneyHosts;
+        private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
 
         // Changing variables
-        private int currentSlot;
         private bool isFrozen;
+        private int currentSlot;
         private readonly ConcurrentDictionary<int, SlotData> slots;
 
         public ServerService(
@@ -28,9 +29,9 @@ namespace Boney.Services
             )
         {
             this.processId = processId;
-            this.processesSuspectedPerSlot = processesSuspectedPerSlot;
-            this.processFrozenPerSlot = processFrozenPerSlot;
             this.boneyHosts = boneyHosts;
+            this.processFrozenPerSlot = processFrozenPerSlot;
+            this.processesSuspectedPerSlot = processesSuspectedPerSlot;
 
             this.currentSlot = 0;
             this.isFrozen = false;
@@ -58,11 +59,11 @@ namespace Boney.Services
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot];
             Monitor.PulseAll(this);
-            Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
+            Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")} for slot {currentSlot+1}");
 
             this.currentSlot += 1;
 
-            // TODO: increase processId by this.boneyHosts.Count
+            // Every slot increase processId to allow progress when the system configuration changes
             this.processId += this.boneyHosts.Count;
 
             Monitor.Exit(this);
@@ -78,17 +79,13 @@ namespace Boney.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
                 Monitor.Wait(this);
-                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             SlotData slot = this.slots[request.Slot];
   
             if (slot.ReadTimestamp < request.LeaderId)
-            {
                 slot.ReadTimestamp = request.LeaderId;
-            }
 
             PromiseReply reply = new PromiseReply
             {
@@ -97,8 +94,8 @@ namespace Boney.Services
                 Value = slot.WrittenValue,
             };
 
-            Console.WriteLine($"({request.Slot})--> Prepare({request.LeaderId})");
-            Console.WriteLine($"({request.Slot})    <-- Promise({slot.ReadTimestamp},{slot.WrittenValue})");
+            Console.WriteLine($"({request.Slot})    Received Prepare({request.LeaderId})");
+            Console.WriteLine($"({request.Slot})        Answered Promise({slot.ReadTimestamp},{slot.WrittenValue})");
 
             Monitor.Exit(this);
             return reply;
@@ -109,15 +106,12 @@ namespace Boney.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                // wait for slot to be unfrozen
-                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
                 Monitor.Wait(this);
-                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             SlotData slot = this.slots[request.Slot];
 
-            Console.WriteLine($"({request.Slot})--> Accept({request.LeaderId}, {request.Value})");
+            Console.WriteLine($"({request.Slot})    Recevied Accept({request.LeaderId}, {request.Value})");
 
             if (slot.ReadTimestamp == request.LeaderId)
             {
@@ -128,7 +122,7 @@ namespace Boney.Services
                 SendDecideRequest(slot.Slot, slot.WriteTimestamp, request.Value);
             }
 
-            Console.WriteLine($"({request.Slot})    <-- Accepted({slot.WriteTimestamp},{slot.WrittenValue})");
+            Console.WriteLine($"({request.Slot})        Answered Accepted({slot.WriteTimestamp},{slot.WrittenValue})");
 
             AcceptedReply reply = new AcceptedReply
             {
@@ -146,15 +140,12 @@ namespace Boney.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                // wait for slot to be unfrozen
-                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
                 Monitor.Wait(this);
-                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");//
             }
 
             SlotData slot = this.slots[request.Slot];
 
-            Console.WriteLine($"({request.Slot})--> Decide({request.WriteTimestamp},{request.Value})");
+            Console.WriteLine($"({request.Slot})    Recevied Decide({request.WriteTimestamp},{request.Value})");
 
             // Learners keep track of all decided values to check for a majority
             slot.DecidedReceived.Add((request.WriteTimestamp, request.Value));
@@ -170,7 +161,8 @@ namespace Boney.Services
                 else
                     receivedRequests.Add(entry, 1);
             }
-            // If a request appears more than the majority, it is the decided value
+            
+            // If a request appears more times than the majority value, it's the decided value
             foreach (KeyValuePair<(int, int), int> requestFrequency in receivedRequests)
             {
                 if (requestFrequency.Value >= majority)
@@ -181,7 +173,7 @@ namespace Boney.Services
                 }
             }
 
-            Console.WriteLine($"({request.Slot})    <-- Decided()");
+            Console.WriteLine($"({request.Slot})        Answered Decided()");
             Monitor.Exit(this);
             return new DecideReply
             {
@@ -200,6 +192,8 @@ namespace Boney.Services
                 Slot = slot,
                 LeaderId = leaderId
             };
+
+            Console.WriteLine($"({slot}) Sending Prepare({leaderId})");
 
             List<PromiseReply> promiseResponses = new List<PromiseReply>();
 
@@ -236,6 +230,8 @@ namespace Boney.Services
                 LeaderId = leaderId,
                 Value = value,
             };
+            
+            Console.WriteLine($"({slot}) Sending Accept({leaderId},{value})");
 
             List<AcceptedReply> acceptResponses = new List<AcceptedReply>();
 
@@ -275,6 +271,8 @@ namespace Boney.Services
                 Value = value
             };
 
+            Console.WriteLine($"({slot}) Sending Decide({writeTimestamp},{value})");
+
             foreach (var host in this.boneyHosts)
             {
                 Task t = Task.Run(() =>
@@ -304,16 +302,13 @@ namespace Boney.Services
             bool success = true;
             while (slot.IsPaxosRunning)
             {
-                // wait for paxos to end
-                Console.WriteLine($"Waiting (paxos to end)... - {Thread.CurrentThread.ManagedThreadId}");
                 Monitor.Wait(this);
-                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
 
                 // Slot ended without reaching consensus
                 // Do paxos again with another configuration
                 if (this.currentSlot > slot.Slot && slot.DecidedValue == -1)
                 {
-                    Console.WriteLine("SLOT ACABOU SEM PAXOS VOU COMECAR UM NOVO");
+                    Console.WriteLine($"Slot {slot.Slot} ended without consensus, starting a new paxos instance in slot {this.currentSlot}.");
                     success = false;
                     break;
                 }
@@ -323,15 +318,15 @@ namespace Boney.Services
 
         public bool DoPaxos(CompareAndSwapRequest request)
         {
+            //Monitor.Enter(this);
+            
             SlotData slot = this.slots[request.Slot];
 
-            // !(slot.WrittenValue != -1 || slot.DecidedValue != -1)
-
-            //if (slot.WrittenValue == -1 && slot.DecidedValue == -1)
+            // If paxos isn't running and a value hasn't been decided, start paxos
             if (!slot.IsPaxosRunning && slot.DecidedValue == -1)
             {
-                if(slot.WrittenValue == -1)
-                    slot.WrittenValue = request.Invalue;
+                //if(slot.WrittenValue == -1)
+                //    slot.WrittenValue = request.Invalue;
                 
                 slot.IsPaxosRunning = true;
             }
@@ -339,14 +334,15 @@ namespace Boney.Services
             {
                 return WaitForPaxos(slot, request);
             }
-            
-            // Compute paxos leader (lowest id with NS)
+
+            Console.WriteLine($"Starting Paxos instance in slot {this.currentSlot} for slot {request.Slot}");
+
             // Select new leader
             Dictionary<int, bool> processesSuspected = this.processesSuspectedPerSlot[currentSlot - 1];
             int leader = int.MaxValue;
             foreach (KeyValuePair<int, bool> process in processesSuspected)
             {
-                // Process that is not suspected and has the lowest id
+                // Boney process that is not suspected and has the lowest id
                 if (!process.Value && process.Key < leader && this.boneyHosts.ContainsKey(process.Key))
                     leader = process.Key;
             }
@@ -356,9 +352,12 @@ namespace Boney.Services
                 // this should never happen, if process is running then he can be the leader  
             }
             
-            Console.WriteLine($"Paxos Leader is {leader}");
+            Console.WriteLine($"Paxos leader is {leader} in slot {this.currentSlot} for slot {request.Slot}");
 
+            // Save processId for current paxos instance
+            // Otherwise it might change in the middle of paxos if a new slot begins
             int leaderCurrentId = this.processId;
+            
             // 'leader' comes from config, doesnt account for increase in processId
             if (this.processId%3 != leader)
             {
@@ -366,9 +365,9 @@ namespace Boney.Services
             }
 
             Monitor.Exit(this);
-
             // Send prepare to all acceptors
             List<PromiseReply> promiseResponses = SendPrepareRequest(request.Slot, leaderCurrentId);
+            
             Monitor.Enter(this);
             // Stop being leader if there is a more recent one
             foreach (var response in promiseResponses)
@@ -391,10 +390,11 @@ namespace Boney.Services
 
             // If acceptors have no value, send own value
             if (valueToPropose == -1)
-                valueToPropose = slot.WrittenValue;
+                valueToPropose = request.Invalue;
+                //valueToPropose = slot.WrittenValue;
 
             Monitor.Exit(this);
-            // Send accept to all acceptors which will send decide to learners
+            // Send accept to all acceptors which will send decide to all learners
             SendAcceptRequest(request.Slot, leaderCurrentId, valueToPropose);
 
             Monitor.Enter(this);
@@ -407,28 +407,23 @@ namespace Boney.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                // wait for process to be unfrozen
-                Console.WriteLine($"Waiting (frozen)... - {Thread.CurrentThread.ManagedThreadId}");
                 Monitor.Wait(this);
-                Console.WriteLine($"Waking up... - {Thread.CurrentThread.ManagedThreadId}");
             }
 
             SlotData slot = this.slots[request.Slot];
         
             Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
-            Console.WriteLine("Starting Paxos...");
-            
+            //Monitor.Exit(this);
+
             while (!DoPaxos(request))
             {
                 slot.IsPaxosRunning = false;
-                Console.WriteLine("VOU CORRER OUTRO PAXOS");
             }
             
-            Console.WriteLine("Paxos terminou");
             Monitor.Exit(this);
 
-            Console.WriteLine($"Paxos ended with value {slot.DecidedValue} - {Thread.CurrentThread.ManagedThreadId}");
+            Console.WriteLine($"Compare and swap replied with value {slot.DecidedValue} for slot {request.Slot}");
             CompareAndSwapReply reply = new CompareAndSwapReply
             {
                 Slot = request.Slot,

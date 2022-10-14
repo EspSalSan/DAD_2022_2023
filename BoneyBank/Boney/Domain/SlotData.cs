@@ -8,9 +8,9 @@ namespace Boney.Domain
         private bool isPaxosRunning;
 
         private int decidedValue;   // Value decided by Paxos (final)
+        private int writtenValue;   // Value written by Paxos client (not final)
         private int readTimestamp;
         private int writeTimestamp;
-        private int writtenValue;   // Value written by Paxos client (not final)
 
         // Learners keep a list of decided values to know when a majority was
         // achieved and reply to the client with the final value
@@ -22,9 +22,9 @@ namespace Boney.Domain
             this.isPaxosRunning = false;
             
             this.decidedValue = -1;
+            this.writtenValue = -1;
             this.readTimestamp = -1;
             this.writeTimestamp = -1;
-            this.writtenValue = -1;
             
             this.decidedReceived = new List<(int, int)>();
         }

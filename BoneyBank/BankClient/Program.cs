@@ -149,6 +149,26 @@ namespace BankClient
             Task.WaitAny(tasks.ToArray());
         }
 
+        static void Sleep(string[] commandArgs)
+        {
+            // Verify arguments
+            if (commandArgs.Length != 2)
+            {
+                Console.WriteLine("Invalid number of arguments.");
+            }
+            if (!int.TryParse(commandArgs[1], out int value) || value < 0)
+            {
+                Console.WriteLine("Value must be a positive integer.");
+                return;
+            }
+
+            Console.WriteLine($"Sleeping for {value} milliseconds...");
+
+            System.Threading.Thread.Sleep(value);
+
+            Console.WriteLine("Done sleeping.");
+        }
+
 
         static void Main(string[] args)
         {
@@ -190,6 +210,10 @@ namespace BankClient
 
                     case "R":
                         SendReadBalanceRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
+                        break;
+
+                    case "S":
+                        Sleep(commandArgs);
                         break;
 
                     default:

@@ -9,8 +9,8 @@ namespace BankServer.Services
     {
         // Config file variables
         private readonly int processId;
-        private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
         private readonly List<bool> processFrozenPerSlot;
+        private readonly List<Dictionary<int, bool>> processesSuspectedPerSlot;
         private readonly Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts;
         private readonly Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts;
 
@@ -31,10 +31,10 @@ namespace BankServer.Services
             )
         {
             this.processId = processId;
-            this.processesSuspectedPerSlot = processesSuspectedPerSlot;
-            this.processFrozenPerSlot = processFrozenPerSlot;
             this.bankHosts = bankHosts;
             this.boneyHosts = boneyHosts;
+            this.processFrozenPerSlot = processFrozenPerSlot;
+            this.processesSuspectedPerSlot = processesSuspectedPerSlot;
 
             this.balance = 0;
             this.isFrozen = false;
@@ -99,7 +99,6 @@ namespace BankServer.Services
                     Console.WriteLine("[NOT IMPLEMENTED] Leader has changed, starting cleanup...");
                     // TODO: Cleanup
                 }
-
                 Console.WriteLine("Preparation ended.");
             }
             Monitor.PulseAll(this);
@@ -192,13 +191,7 @@ namespace BankServer.Services
             Monitor.Enter(this);
             while (this.isFrozen)
             {
-                // wait until not frozen
-                Monitor.Wait(this);
-            }
-            
-            if (this.processId == this.primaryPerSlot[this.currentSlot])
-            {
-                //Start2PC(ref request); // TODO: Work in progress
+                Monitor.Wait(this);                 // wait until not frozen
             }
 
             Console.WriteLine($"Read request from {request.ClientId}");
@@ -210,6 +203,76 @@ namespace BankServer.Services
 
             Monitor.Exit(this);
             return reply;
+        }
+
+        /*
+         * Compare And Swap Service (Client) Implementation
+         * Communication between BankServer and BankServer
+         */
+        public void DoCompareAndSwap(int slot)
+        {
+            // Choose primary process
+            int primary = int.MaxValue;
+            foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[slot - 1])
+            {
+                // Bank process that is not suspected and has the lowest id
+                if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
+                    primary = process.Key;
+            }
+
+            if (primary == int.MaxValue)
+            {
+                // TODO: Guardar ,como lider do slot N, o lider do slot N-1 ?
+                Console.WriteLine("No process is valid for leader election.");
+                Console.WriteLine("No progress is going to be made in this slot.");
+                return;
+            }
+
+            int electedPrimary = SendCompareAndSwapRequest(primary, slot);
+
+            this.primaryPerSlot.Add(slot, electedPrimary);
+            Monitor.PulseAll(this);
+
+            Console.WriteLine($"-----------------------------\r\nProcess {electedPrimary} is the primary for slot {slot}.\r\n-----------------------------");
+        }
+
+        public int SendCompareAndSwapRequest(int primary, int slot)
+        {
+            int compareAndSwapReplyValue = -1;
+
+            CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
+            {
+                Slot = slot,
+                Invalue = primary,
+            };
+
+            Console.WriteLine($"Trying to elect process {primary} as primary for slot {slot}.");
+
+            // Send request to all boney processes
+            List<Task> tasks = new List<Task>();
+            foreach (var host in this.boneyHosts)
+            {
+                Task t = Task.Run(() =>
+                {
+                    try
+                    {
+                        CompareAndSwapReply compareAndSwapReply = host.Value.CompareAndSwap(compareAndSwapRequest);
+                        compareAndSwapReplyValue = compareAndSwapReply.Outvalue;
+                    }
+                    catch (Grpc.Core.RpcException e)
+                    {
+                        Console.WriteLine(e.Status);
+                    }
+                    return Task.CompletedTask;
+                });
+                tasks.Add(t);
+            }
+
+            // Wait for a majority of responses
+            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+
+            return compareAndSwapReplyValue;
         }
 
         /*
@@ -466,81 +529,6 @@ namespace BankServer.Services
 
         public void SendCleanupRequest()
         {
-        }
-
-        /*
-         * Compare And Swap Service (Client) Implementation
-         * Communication between BankServer and BankServer
-         */
-        public void DoCompareAndSwap(int slot)
-        {
-            // Choose new primary process
-            int primary = int.MaxValue;
-            foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[slot - 1])
-            {
-                // Bank process that is not suspected and has the lowest id
-                if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
-                    primary = process.Key;
-            }
-
-            if (primary == int.MaxValue)
-            {
-                // TODO: Guardar como lider do slot N o lider do slot N-1 ?
-                Console.WriteLine("No process is valid for leader election.");
-                Console.WriteLine("No progress is going to be made in this slot.");
-                return;
-            }
-
-            int electedPrimary = SendCompareAndSwapRequest(primary, slot);
-
-            if (electedPrimary == -1)
-            {
-                // TODO: something went wrong at the compare and swap service
-            }
-
-            this.primaryPerSlot.Add(slot, electedPrimary);
-            Monitor.PulseAll(this);
-
-            Console.WriteLine($"-----------------------------\r\nProcess {electedPrimary} is the primary for slot {slot}.\r\n-----------------------------");
-        }
-        
-        public int SendCompareAndSwapRequest(int primary, int slot)
-        {
-            int compareAndSwapReplyValue = -1;
-
-            CompareAndSwapRequest compareAndSwapRequest = new CompareAndSwapRequest
-            {
-                Slot = slot,
-                Invalue = primary,
-            };
-
-            Console.WriteLine($"Trying to elect process {primary} as primary for slot {slot}.");
-
-            // Send request to all boney processes
-            List<Task> tasks = new List<Task>();
-            foreach (var host in this.boneyHosts)
-            {
-                Task t = Task.Run(() =>
-                {
-                    try
-                    {
-                        CompareAndSwapReply compareAndSwapReply = host.Value.CompareAndSwap(compareAndSwapRequest);
-                        compareAndSwapReplyValue = compareAndSwapReply.Outvalue;
-                    }
-                    catch (Grpc.Core.RpcException e)
-                    {
-                        Console.WriteLine(e.Status);
-                    }
-                    return Task.CompletedTask;
-                });
-                tasks.Add(t);
-            }
-
-            // Wait for a majority of responses
-            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
-                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
-
-            return compareAndSwapReplyValue;
         }
     }
 }

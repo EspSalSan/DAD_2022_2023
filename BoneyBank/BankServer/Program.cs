@@ -78,7 +78,7 @@ namespace BankServer
             Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
             Console.WriteLine($"Working with {bankHosts.Count} banks and {boneyHosts.Count} boney processes");
 
-            // Starts thread in timeSpan
+            // Starts a new thread for each slot
             SetSlotTimer(startTime, slotDuration * 1000, serverService);
 
             Console.WriteLine("Press any key to stop the server...");

@@ -58,6 +58,8 @@ namespace Boney.Services
 
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot];
+            if (this.currentSlot > 0)
+                this.slots[this.currentSlot].IsPaxosRunning = false;
             Monitor.PulseAll(this);
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")} for slot {currentSlot+1}");
 
@@ -418,7 +420,6 @@ namespace Boney.Services
 
             while (!DoPaxos(request))
             {
-                slot.IsPaxosRunning = false;
             }
             
             Monitor.Exit(this);

@@ -10,6 +10,8 @@ namespace BankServer
 {
     internal class Program
     {
+        static System.Threading.Timer timer;
+   
         static private void SetSlotTimer(TimeSpan time, int slotDuration, ServerService serverService)
         {
             TimeSpan timeToGo = time - DateTime.Now.TimeOfDay;
@@ -22,7 +24,7 @@ namespace BankServer
             }
 
             // A thread will be created at timeToGo and after that, every slotDuration
-            new System.Threading.Timer(x =>
+            timer = new System.Threading.Timer(x =>
             {
                 serverService.PrepareSlot();
             }, null, (int)timeToGo.TotalMilliseconds, slotDuration);

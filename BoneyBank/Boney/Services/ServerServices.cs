@@ -326,10 +326,7 @@ namespace Boney.Services
 
             // If paxos isn't running and a value hasn't been decided, start paxos
             if (!slot.IsPaxosRunning && slot.DecidedValue == -1)
-            {
-                //if(slot.WrittenValue == -1)
-                //    slot.WrittenValue = request.Invalue;
-                
+            {   
                 slot.IsPaxosRunning = true;
             }
             else
@@ -393,7 +390,6 @@ namespace Boney.Services
             // If acceptors have no value, send own value
             if (valueToPropose == -1)
                 valueToPropose = request.Invalue;
-                //valueToPropose = slot.WrittenValue;
 
             Monitor.Exit(this);
             // Send accept to all acceptors which will send decide to all learners
@@ -416,7 +412,6 @@ namespace Boney.Services
         
             Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
-            //Monitor.Exit(this);
 
             while (!DoPaxos(request))
             {

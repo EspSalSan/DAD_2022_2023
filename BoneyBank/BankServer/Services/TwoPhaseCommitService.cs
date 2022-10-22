@@ -21,5 +21,10 @@ namespace BankServer.Services
         {
             return Task.FromResult(serverService.Commit(request));
         }
+
+        public override Task<ListPendingRequestsReply> ListPendingRequests(ListPendingRequestsRequest request, ServerCallContext context)
+        {
+            return Task.FromResult(serverService.ListPendingRequests(request));
+        }
     }
 }

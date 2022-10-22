@@ -55,7 +55,7 @@ namespace Boney.Services
                 Console.WriteLine("Slot duration ended but no more slots to process.");
                 return;
             }
-
+            
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot];
             if (this.currentSlot > 0)
@@ -318,7 +318,7 @@ namespace Boney.Services
             return success;
         }
 
-        public bool DoPaxos(CompareAndSwapRequest request)
+        public bool DoPaxosInstance(CompareAndSwapRequest request)
         {
             //Monitor.Enter(this);
             
@@ -358,7 +358,7 @@ namespace Boney.Services
             int leaderCurrentId = this.processId;
             
             // 'leader' comes from config, doesnt account for increase in processId
-            if (this.processId%3 != leader)
+            if (this.processId % this.boneyHosts.Count != leader)
             {
                 return WaitForPaxos(slot, request);
             }
@@ -412,21 +412,19 @@ namespace Boney.Services
         
             Console.WriteLine($"Compare and swap request with value {request.Invalue} in slot {request.Slot}");
 
-
-            while (!DoPaxos(request))
-            {
+            while (!DoPaxosInstance(request))
+            {   
             }
             
             Monitor.Exit(this);
 
             Console.WriteLine($"Compare and swap replied with value {slot.DecidedValue} for slot {request.Slot}");
-            CompareAndSwapReply reply = new CompareAndSwapReply
+
+            return  new CompareAndSwapReply
             {
                 Slot = request.Slot,
                 Outvalue = slot.DecidedValue,
             };
-
-            return reply;
         }
     }
 }

@@ -1,27 +1,27 @@
 syntax = "proto3";
 
 service TwoPhaseCommit {
-	rpc Tentative(TentativeRequest) returns (TentativeReply);
-	rpc Commit(CommitRequest)		returns (CommitReply);
+	rpc Tentative(TentativeRequest)						returns (TentativeReply);
+	rpc Commit(CommitRequest)							returns (CommitReply);
+	rpc ListPendingRequests(ListPendingRequestsRequest) returns (ListPendingRequestsReply);
 }
 
-// TODO: 2PC is still unfinished
-// Do we need to send this ?
-// Secondary bank processes must update their balancce somehow
-enum ClientAction {
+enum Type {
 	DEPOSIT = 0;
 	WITHDRAW = 1;
-	READ = 2;
 }
-message ClientRequest {
-	ClientAction action = 1;
-	int32 value = 2;
+message Command {
+	int32 slot = 1;
+	int32 clientId = 2;
+	int32 clientSequenceNumber = 3;
+	int32 sequenceNumber = 4;
+	Type type = 5;
+	int32 value = 6;
 }
 
 message TentativeRequest {
 	int32 processId = 1;
-	int32 slot = 2;
-	int32 sequenceNumber = 3;
+	Command command = 2;
 }
 message TentativeReply {
 	bool acknowledge = 1;
@@ -29,20 +29,14 @@ message TentativeReply {
 
 message CommitRequest {
 	int32 processId = 1;
-	int32 slot = 2;
-	int32 sequenceNumber = 3;
-	ClientRequest request = 4;
+	Command command = 2;
 }
 message CommitReply {
-}
-
-service Cleanup {
-	rpc Cleanup(ListPendingRequestsRequest) returns (ListPendingRequestsReply);
 }
 
 message ListPendingRequestsRequest {
 	int32 lastKnownSequenceNumber = 1;
 }
-message ListPendingRequestsReply{
-	// Empty ?
+message ListPendingRequestsReply {
+	repeated Command commands = 1;
 }

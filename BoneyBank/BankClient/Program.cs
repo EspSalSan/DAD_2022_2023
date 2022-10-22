@@ -57,6 +57,8 @@ namespace BankClient
                tasks.Add(t);
             }
 
+            // TODO: Idealmente espera pela task do primario
+            // Como fazer isso ?
             // Clients wait for only one response
             Task.WaitAny(tasks.ToArray());
         }

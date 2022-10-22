@@ -1,6 +1,7 @@
 ﻿using BankServer.Domain;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -364,6 +365,9 @@ namespace BankServer.Services
             Console.WriteLine($"Commit from {request.ProcessId} in slot {request.Command.Slot} with sequence number {request.Command.SequenceNumber} to {request.Command.Type}");
 
             Monitor.Enter(this);
+
+            // TODO: should verify if command with lower sequence number was already committed             
+
             switch (request.Command.Type)
             {
                 case (Type.Deposit):
@@ -519,32 +523,27 @@ namespace BankServer.Services
 
         public ListPendingRequestsReply ListPendingRequests(ListPendingRequestsRequest request)
         {
-
-            // só faz cleanup o processo que se tornou lider e antes nao era 
-            // do cleanup();
-            // Send 'ListPendingRequests(LastKnownSequenceNumber)' to all banks 
-            // Nodes only reply to this request after they have moved to the new slot and the request comes from the primary assigned for that slot
-            // Wait for a majority of replies
-            // Collect sequence numbers from previous primaries that have not been commited yet
-            // propose and commit those sequence numbers
-            // start assigning new sequence numbers to commands that dont have
-
-            // em portugues:
-            // O (novo) Lider envia o numero de sequencia mais alto que foi committed a todas as replicas
-            // Recebe vários numeros de sequencia que foram proposed mas não committed
-            // Dá propose e commit desses numeros de sequencia
-            // Quando acabar, começa a dar assign de numeros de sequencia a comandos que ainda nao tenham
-
-            // Coisas que 'parecem' ser preciso guardar para cada banco (por slot)
-            /*
-             * Comandos sem sequenceNumber
-             * Comandos com sequenceNumber
-             * Comandos proposed
-             * Comandos commited
-             */
+            // TODO: why do we send the lastKnownSequenceNumber ?
             
+            
+            // Transform every tentativeCommand into a Command from grpc
+            List<Command> tentativeCommands = new List<Command>();
+            foreach (var tentativeCommand in this.tentativeCommands)
+            {
+                tentativeCommands.Add(new Command
+                {
+                    Slot = tentativeCommand.Value.Slot,
+                    ClientId = tentativeCommand.Value.ClientId,
+                    ClientSequenceNumber = tentativeCommand.Value.ClientSequenceNumber,
+                    SequenceNumber = tentativeCommand.Value.SequenceNumber,
+                    Type = (Type)tentativeCommand.Value.Type,
+                    Value = tentativeCommand.Value.Value,
+                });
+            }
+
             return new ListPendingRequestsReply
             {
+                Commands = { tentativeCommands },
             };
         }
 
@@ -559,15 +558,18 @@ namespace BankServer.Services
             Console.WriteLine("Starting cleanup");
             this.isCleanning = true;
 
-            SendListPendingRequestsRequest();
+            List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
 
-            // TODO
+
+
+            // TODO do 2PC for every command in clientCommands with correct sequence number
+            
 
 
             this.isCleanning = false;
         }
 
-        public void SendListPendingRequestsRequest()
+        public List<ClientCommand> SendListPendingRequestsRequest()
         {
             Console.WriteLine("Sending list pending requests.");
 
@@ -605,8 +607,37 @@ namespace BankServer.Services
             for (int i = 0; i < majority; i++)
                 tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
 
-            // Aggregate responses
-            // TODO
+            // Merge all commands (that have been proposed but may not have been committed)
+            // Without duplicates
+            List<ClientCommand> commands = new List<ClientCommand>();
+            foreach (ListPendingRequestsReply reply in replies)
+            {
+                foreach (Command command in reply.Commands)
+                {
+                    // Two commands are the same if they have the same clientId and clientSequenceNumber
+                    if (!commands.Any(c => c.ClientId == command.ClientId && c.ClientSequenceNumber == command.ClientSequenceNumber))
+                        // transform command from grpc to ClientCommand (not sure if necessary)
+                        commands.Add(new ClientCommand
+                        (
+                            command.Slot,
+                            command.ClientId,
+                            command.ClientSequenceNumber,
+                            command.SequenceNumber,
+                            (CommandType)command.Type,
+                            command.Value
+                        ));
+                }
+            }
+
+            // Sort commands increasingly by sequence number, if the same sort by decreasingly slot
+            commands.Sort((c1, c2) =>
+            {
+                if (c1.SequenceNumber == c2.SequenceNumber)
+                    return c2.Slot.CompareTo(c1.Slot);
+                return c1.SequenceNumber.CompareTo(c2.SequenceNumber);
+            });
+
+            return commands;
         }
     }
 }

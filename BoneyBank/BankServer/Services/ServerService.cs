@@ -1,7 +1,6 @@
 ﻿using BankServer.Domain;
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -127,7 +126,9 @@ namespace BankServer.Services
 
         public DepositReply DepositMoney(DepositRequest request)
         {
+            
             Monitor.Enter(this);
+            
             while (this.isFrozen)
             {
                 Monitor.Wait(this);
@@ -151,12 +152,10 @@ namespace BankServer.Services
 
             // If leader for the current slot, start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot])
-            {
                 Do2PC(command);
-            }
 
             // Wait for command to be committed (and applied) before sending response
-            while(!this.committedCommands.ContainsKey((command.ClientId, command.ClientSequenceNumber)))
+            while (!this.committedCommands.ContainsKey((command.ClientId, command.ClientSequenceNumber)))
             {
                 Monitor.Wait(this);
             }
@@ -168,12 +167,13 @@ namespace BankServer.Services
             };
             
             Monitor.Exit(this);
-            return reply;
+            return reply; 
         }
 
         public WithdrawReply WithdrawMoney(WithdrawRequest request)
         {
             Monitor.Enter(this);
+            
             while (this.isFrozen)
             {
                 Monitor.Wait(this);  // wait until not frozen
@@ -200,9 +200,7 @@ namespace BankServer.Services
 
             // If leader for the current slot, start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot])
-            {
                 Do2PC(command);
-            }
 
             // Wait for command to be committed (and applied) before sending response
             while (!this.committedCommands.ContainsKey((command.ClientId, command.ClientSequenceNumber)))
@@ -339,12 +337,9 @@ namespace BankServer.Services
                 }
             }
             else
-            {
                 ack = false;
-            }
 
             if (ack)
-            {
                 // Add to tentative commands
                 this.tentativeCommands.Add(
                     (request.Command.ClientId, request.Command.ClientSequenceNumber),
@@ -357,7 +352,6 @@ namespace BankServer.Services
                         request.Command.Value
                     )
                 );
-            }
 
             return new TentativeReply
             {
@@ -368,13 +362,14 @@ namespace BankServer.Services
         public CommitReply Commit(CommitRequest request)
         {
             Console.WriteLine($"Commit from {request.ProcessId} in slot {request.Command.Slot} with sequence number {request.Command.SequenceNumber} to {request.Command.Type}");
-            
+
+            Monitor.Enter(this);
             switch (request.Command.Type)
             {
                 case (Type.Deposit):
                     this.balance += request.Command.Value;
                     break;
-
+                    
                 case (Type.Withdraw):
                     if (request.Command.Value <= this.balance)
                     {
@@ -383,13 +378,17 @@ namespace BankServer.Services
                     break;
             }
 
+
+            // TODO: Existe a possibilidade de o comando nunca ter estado tentative ?
+
             // Transfer command from tentative to committed
             (int, int) key = (request.Command.ClientId, request.Command.ClientSequenceNumber);
             ClientCommand command = this.tentativeCommands.GetValueOrDefault(key);
             this.tentativeCommands.Remove(key);
             this.committedCommands.Add(key, command);
-
-            Monitor.PulseAll(this);
+    
+            Monitor.PulseAll(this);  
+            Monitor.Exit(this);
 
             return new CommitReply
             {
@@ -416,6 +415,8 @@ namespace BankServer.Services
                 this.currentSequenceNumber = sequenceNumber;
             }
             //  TODO: If tentative fails, idk
+
+            Console.WriteLine("Finished 2PC");
         }
         
         public bool SendTentativeRequest(int sequenceNumber, ClientCommand command)
@@ -492,7 +493,6 @@ namespace BankServer.Services
             };
 
             // Send request to all bank processes
-            List<Task> tasks = new List<Task>();
             List<CommitReply> replies = new List<CommitReply>();
             foreach (var host in this.bankHosts)
             {
@@ -501,15 +501,14 @@ namespace BankServer.Services
                     try
                     {
                         CommitReply commitReply = host.Value.Commit(commitRequest);
-                    }
+                        Console.WriteLine("Received commit reply");                    }
                     catch (Grpc.Core.RpcException e)
                     {
                         Console.WriteLine(e.Status);
                     }
                     return Task.CompletedTask;
                 });
-                tasks.Add(t);
-            }
+            }            
         }
 
         /*

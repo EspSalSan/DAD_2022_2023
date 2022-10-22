@@ -25,8 +25,6 @@ namespace BankClient
                 return;
             }
 
-            clientSequenceNumber++;
-
             DepositRequest depositRequest = new DepositRequest 
             { 
                 ClientId = processId,
@@ -75,8 +73,6 @@ namespace BankClient
                 Console.WriteLine("Value must be a positive integer.");
                 return;
             }
-
-            clientSequenceNumber++;
 
             WithdrawRequest withdrawRequest = new WithdrawRequest {
                 ClientId = processId,
@@ -203,10 +199,12 @@ namespace BankClient
                 switch (commandArgs[0])
                 {
                     case "D":
+                        clientSequenceNumber++;
                         SendDepositRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     case "W":
+                        clientSequenceNumber++;
                         SendWithdrawRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 

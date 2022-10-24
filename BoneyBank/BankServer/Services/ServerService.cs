@@ -251,12 +251,20 @@ namespace BankServer.Services
         {
             // Choose primary process
             int primary = int.MaxValue;
-            foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[slot - 1])
+            if (slot > 1 && !this.processesSuspectedPerSlot[slot-1][this.primaryPerSlot[slot - 1]])
             {
-                // Bank process that is not suspected and has the lowest id
-                if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
-                    primary = process.Key;
+                primary = this.primaryPerSlot[slot - 1];
             }
+            else
+            {
+                foreach (KeyValuePair<int, bool> process in this.processesSuspectedPerSlot[slot - 1])
+                {
+                    // Bank process that is not suspected and has the lowest id
+                    if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
+                        primary = process.Key;
+                }
+            } 
+            
 
             if (primary == int.MaxValue)
             {

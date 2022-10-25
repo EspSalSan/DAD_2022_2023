@@ -68,8 +68,8 @@ namespace BankServer.Services
          */
         public void PrepareSlot()
         {
+            try { 
             /*
-             * TODO: How to handle client requests (2PC, sequence numbers, etc)
              * IDEIAS:
              * somehow make process stop processing requeste
              * when the slot ends:
@@ -127,6 +127,11 @@ namespace BankServer.Services
             }
             Monitor.PulseAll(this);
             Monitor.Exit(this);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.StackTrace);
+            }
         }
 
         /*
@@ -136,7 +141,6 @@ namespace BankServer.Services
 
         public DepositReply DepositMoney(DepositRequest request)
         {
-            
             Monitor.Enter(this);
 
             ClientCommand command = new ClientCommand(
@@ -160,7 +164,7 @@ namespace BankServer.Services
                command
             );
 
-            // If leader for the current slot, start 2PC
+            // If leader for the current slot (and command is from the current slot), start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
             {
                 Monitor.Exit(this);
@@ -377,20 +381,42 @@ namespace BankServer.Services
                 else
                     ack = false;
 
+                // TODO: Verify correctness
                 if (ack)
-                    // Add to tentative commands
-                    this.tentativeCommands.Add(
-                        (request.Command.ClientId, request.Command.ClientSequenceNumber),
-                        new ClientCommand(
-                            request.Command.Slot,
-                            request.Command.ClientId,
-                            request.Command.ClientSequenceNumber,
-                            request.Command.SequenceNumber,
-                            (CommandType)request.Command.Type,
-                            request.Command.Value
-                        )
-                    );
+                {
+                    if(!this.tentativeCommands.ContainsKey((request.Command.ClientId, request.Command.ClientSequenceNumber)))
+                    {
+                        // Add to tentative commands 
+                        this.tentativeCommands.Add(
+                            (request.Command.ClientId, request.Command.ClientSequenceNumber),
+                            new ClientCommand(
+                                request.Command.Slot,
+                                request.Command.ClientId,
+                                request.Command.ClientSequenceNumber,
+                                request.Command.SequenceNumber,
+                                (CommandType)request.Command.Type,
+                                request.Command.Value
+                            )
+                        );
+                    } else if(this.tentativeCommands[(request.Command.ClientId, request.Command.ClientSequenceNumber)].Slot < request.Command.Slot)
+                    {
+                        this.tentativeCommands.Remove((request.Command.ClientId, request.Command.ClientSequenceNumber));
+                        this.tentativeCommands.Add(
+                            (request.Command.ClientId, request.Command.ClientSequenceNumber),
+                            new ClientCommand(
+                                request.Command.Slot,
+                                request.Command.ClientId,
+                                request.Command.ClientSequenceNumber,
+                                request.Command.SequenceNumber,
+                                (CommandType)request.Command.Type,
+                                request.Command.Value
+                            )
+                        );
 
+                    }
+                }
+
+               
                 Monitor.Exit(this);
                 return new TentativeReply
                 {
@@ -575,8 +601,14 @@ namespace BankServer.Services
         public ListPendingRequestsReply ListPendingRequests(ListPendingRequestsRequest request)
         {
             // TODO: why do we send the lastKnownSequenceNumber ?
-            
-            
+
+            Monitor.Enter(this);
+
+            while (this.isFrozen)
+            {
+                Monitor.Wait(this);
+            }
+
             // Transform every tentativeCommand into a Command from grpc
             List<Command> tentativeCommands = new List<Command>();
             foreach (var tentativeCommand in this.tentativeCommands)
@@ -594,7 +626,9 @@ namespace BankServer.Services
                     });
                 }
             }
-            Console.WriteLine("Sending tentative commands =" + tentativeCommands.Count);
+            Console.WriteLine("Sending tentative commands = " + tentativeCommands.Count);
+            
+            Monitor.Exit(this);
             return new ListPendingRequestsReply
             {
                 Commands = { tentativeCommands },
@@ -674,6 +708,7 @@ namespace BankServer.Services
             List<ClientCommand> commands = new List<ClientCommand>();
             foreach (ListPendingRequestsReply reply in replies)
             {
+                Console.WriteLine($"processing reply with {reply.Commands.Count} commands");
                 foreach (Command command in reply.Commands)
                 {
                     // Two commands are the same if they have the same clientId and clientSequenceNumber
@@ -699,7 +734,7 @@ namespace BankServer.Services
                 return c1.SequenceNumber.CompareTo(c2.SequenceNumber);
             });
 
-            Console.WriteLine("Command count =" + commands.Count);
+            Console.WriteLine("Total commands received = " + commands.Count);
             // Print all commands form commands list, printing the sequence number and slot
             foreach (ClientCommand command in commands)
             {

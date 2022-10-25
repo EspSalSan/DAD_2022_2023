@@ -114,8 +114,11 @@ namespace BankServer.Services
                     Console.WriteLine($"Leader changed from {this.primaryPerSlot[this.currentSlot - 1]} to {this.primaryPerSlot[this.currentSlot]}");
                     try
                     {
+                        Monitor.Exit(this);
                         DoCleanup();
-                    } catch (Exception e)
+                        Monitor.Enter(this);
+                    }
+                    catch (Exception e)
                     {
                         Console.WriteLine(e.StackTrace);
                     }
@@ -578,18 +581,20 @@ namespace BankServer.Services
             List<Command> tentativeCommands = new List<Command>();
             foreach (var tentativeCommand in this.tentativeCommands)
             {
-                tentativeCommands.Add(new Command
+                if (tentativeCommand.Value.ClientSequenceNumber > request.LastKnownSequenceNumber)
                 {
-                    Slot = tentativeCommand.Value.Slot,
-                    ClientId = tentativeCommand.Value.ClientId,
-                    ClientSequenceNumber = tentativeCommand.Value.ClientSequenceNumber,
-                    SequenceNumber = tentativeCommand.Value.SequenceNumber,
-                    Type = (Type)tentativeCommand.Value.Type,
-                    Value = tentativeCommand.Value.Value,
-                });
+                    tentativeCommands.Add(new Command
+                    {
+                        Slot = tentativeCommand.Value.Slot,
+                        ClientId = tentativeCommand.Value.ClientId,
+                        ClientSequenceNumber = tentativeCommand.Value.ClientSequenceNumber,
+                        SequenceNumber = tentativeCommand.Value.SequenceNumber,
+                        Type = (Type)tentativeCommand.Value.Type,
+                        Value = tentativeCommand.Value.Value,
+                    });
+                }
             }
             Console.WriteLine("Sending tentative commands =" + tentativeCommands.Count);
-
             return new ListPendingRequestsReply
             {
                 Commands = { tentativeCommands },
@@ -604,18 +609,26 @@ namespace BankServer.Services
         
         public void DoCleanup()
         {
+
             Console.WriteLine("Starting cleanup");
             this.isCleanning = true;
-
             List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
+
+            foreach (ClientCommand command in clientCommands)
+            {
+                command.Slot = this.currentSlot;
+                Do2PC(command);
+            }
 
 
 
             // TODO do 2PC for every command in clientCommands with correct sequence number
-            
 
 
+            Monitor.Enter(this);
             this.isCleanning = false;
+            Monitor.PulseAll(this);
+            Monitor.Exit(this);
         }
 
         public List<ClientCommand> SendListPendingRequestsRequest()

@@ -112,7 +112,13 @@ namespace BankServer.Services
                 if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[this.currentSlot] != this.primaryPerSlot[this.currentSlot - 1] && this.primaryPerSlot[this.currentSlot] == this.processId)
                 {
                     Console.WriteLine($"Leader changed from {this.primaryPerSlot[this.currentSlot - 1]} to {this.primaryPerSlot[this.currentSlot]}");
-                    //DoCleanup();
+                    try
+                    {
+                        DoCleanup();
+                    } catch (Exception e)
+                    {
+                        Console.WriteLine(e.StackTrace);
+                    }
                 }
                 Console.WriteLine("Preparation ended.");
             }
@@ -153,7 +159,12 @@ namespace BankServer.Services
 
             // If leader for the current slot, start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
+            {
+                Monitor.Exit(this);
                 Do2PC(command);
+                Monitor.Enter(this);
+            }
+
 
             // Wait for command to be committed (and applied) before sending response
             while (!this.committedCommands.ContainsKey((command.ClientId, command.ClientSequenceNumber)))
@@ -201,7 +212,11 @@ namespace BankServer.Services
 
             // If leader for the current slot, start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
+            {
+                Monitor.Exit(this);
                 Do2PC(command);
+                Monitor.Enter(this);
+            }
 
             // Wait for command to be committed (and applied) before sending response
             while (!this.committedCommands.ContainsKey((command.ClientId, command.ClientSequenceNumber)))
@@ -573,6 +588,7 @@ namespace BankServer.Services
                     Value = tentativeCommand.Value.Value,
                 });
             }
+            Console.WriteLine("Sending tentative commands =" + tentativeCommands.Count);
 
             return new ListPendingRequestsReply
             {

@@ -68,19 +68,8 @@ namespace BankServer.Services
          */
         public void PrepareSlot()
         {
-            try { 
-            /*
-             * IDEIAS:
-             * somehow make process stop processing requeste
-             * when the slot ends:
-             * if there are requests pending (and is current leader), they go to the next slot
-             * keep this requests as nonFinished
-             * during the switch of slot:
-             * if requests come, save then and dont process
-             * (maybe) send them to the listOfPending (if the leader is another)
-             */
-
             Monitor.Enter(this);
+            Console.WriteLine("Preparing new slot(s) -----------------------");
             if (this.totalSlots >= processFrozenPerSlot.Count)
             {
                 Console.WriteLine("Slot duration ended but no more slots to process.");
@@ -95,6 +84,7 @@ namespace BankServer.Services
 
             if (this.isFrozen)
             {
+                Console.WriteLine("Ending preparation -----------------------");
                 Monitor.Exit(this);
                 return;
             }
@@ -109,29 +99,25 @@ namespace BankServer.Services
                 
                 DoCompareAndSwap(this.currentSlot);
 
-                if (this.primaryPerSlot.Count > 1 && this.primaryPerSlot[this.currentSlot] != this.primaryPerSlot[this.currentSlot - 1] && this.primaryPerSlot[this.currentSlot] == this.processId)
+                // If leader changed, do cleanup
+                if (
+                    this.primaryPerSlot.Count > 1 && 
+                    this.primaryPerSlot[this.currentSlot] != this.primaryPerSlot[this.currentSlot - 1] && 
+                    this.primaryPerSlot[this.currentSlot] == this.processId
+                    )
                 {
                     Console.WriteLine($"Leader changed from {this.primaryPerSlot[this.currentSlot - 1]} to {this.primaryPerSlot[this.currentSlot]}");
-                    try
-                    {
-                        Monitor.Exit(this);
-                        DoCleanup();
-                        Monitor.Enter(this);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e.StackTrace);
-                    }
+
+                    Monitor.Exit(this);
+                    DoCleanup();
+                    Monitor.Enter(this);
                 }
-                Console.WriteLine("Preparation ended.");
+                Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
             }
+            
+            Console.WriteLine("Ending preparation -----------------------");
             Monitor.PulseAll(this);
             Monitor.Exit(this);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.StackTrace);
-            }
         }
 
         /*
@@ -157,7 +143,7 @@ namespace BankServer.Services
                 Monitor.Wait(this);
             }
             
-            Console.WriteLine($"Deposit request ({request.Value}) from {request.ClientId}");
+            Console.WriteLine($"Deposit ({request.Value}) from ({request.ClientId},{request.ClientSequenceNumber})");
 
             this.receivedCommands.Add(
                (command.ClientId, command.ClientSequenceNumber),
@@ -207,7 +193,7 @@ namespace BankServer.Services
                 Monitor.Wait(this);  // wait until not frozen
             }
             
-            Console.WriteLine($"Withdraw request ({request.Value}) from {request.ClientId}");
+            Console.WriteLine($"Withdraw ({request.Value}) from ({request.ClientId},{request.ClientSequenceNumber})");
 
             this.receivedCommands.Add(
                (command.ClientId, command.ClientSequenceNumber),
@@ -250,7 +236,7 @@ namespace BankServer.Services
                 Monitor.Wait(this);                 // wait until not frozen
             }
 
-            Console.WriteLine($"Read request from {request.ClientId}");
+            Console.WriteLine($"Read from ({request.ClientId},{request.ClientSequenceNumber})");
             
             // Para prevenir reads antigos deviamos confirmar se todos os comandos
             // deste cliente já foram executados OU fazer 2PC deles
@@ -301,7 +287,7 @@ namespace BankServer.Services
             this.primaryPerSlot.Add(slot, electedPrimary);
             Monitor.PulseAll(this);
 
-            Console.WriteLine($"-----------------------------\r\nProcess {electedPrimary} is the primary for slot {slot}.\r\n-----------------------------");
+            Console.WriteLine($" >> Process {electedPrimary} is the primary for slot {slot}. << ");
         }
 
         public int SendCompareAndSwapRequest(int primary, int slot)
@@ -346,94 +332,75 @@ namespace BankServer.Services
         /*
          * Two Phase Commit Service (Server) Implementation
          * Communication between BankServer and BankServer
-         * TODO: Work in progress
          */
 
         public TentativeReply Tentative(TentativeRequest request)
         {
-            try
+            Monitor.Enter(this);
+
+            while (this.isFrozen)
             {
-                Monitor.Enter(this);
-
-                while (this.isFrozen)
-                {
-                    Console.WriteLine("Sleeping...");
-                    Monitor.Wait(this);
-                    Console.WriteLine("Waking up...");
-                }
-
-                Console.WriteLine($"Tentative from {request.ProcessId} in slot {request.Command.Slot} with sequence number {request.Command.SequenceNumber}");
-
-                bool ack = true;
-                // Sender is primary of the slot
-                if (this.primaryPerSlot[request.Command.Slot] == request.ProcessId)
-                {
-                    // Primary hasn't changed since the command was sent
-                    foreach (KeyValuePair<int, int> primary in this.primaryPerSlot)
-                    {
-                        if (primary.Key > request.Command.Slot && primary.Value != this.primaryPerSlot[request.Command.Slot])
-                        {
-                            ack = false;
-                            break;
-                        }
-                    }
-                }
-                else
-                    ack = false;
-
-                // TODO: Verify correctness
-                if (ack)
-                {
-                    if(!this.tentativeCommands.ContainsKey((request.Command.ClientId, request.Command.ClientSequenceNumber)))
-                    {
-                        // Add to tentative commands 
-                        this.tentativeCommands.Add(
-                            (request.Command.ClientId, request.Command.ClientSequenceNumber),
-                            new ClientCommand(
-                                request.Command.Slot,
-                                request.Command.ClientId,
-                                request.Command.ClientSequenceNumber,
-                                request.Command.SequenceNumber,
-                                (CommandType)request.Command.Type,
-                                request.Command.Value
-                            )
-                        );
-                    } else if(this.tentativeCommands[(request.Command.ClientId, request.Command.ClientSequenceNumber)].Slot < request.Command.Slot)
-                    {
-                        this.tentativeCommands.Remove((request.Command.ClientId, request.Command.ClientSequenceNumber));
-                        this.tentativeCommands.Add(
-                            (request.Command.ClientId, request.Command.ClientSequenceNumber),
-                            new ClientCommand(
-                                request.Command.Slot,
-                                request.Command.ClientId,
-                                request.Command.ClientSequenceNumber,
-                                request.Command.SequenceNumber,
-                                (CommandType)request.Command.Type,
-                                request.Command.Value
-                            )
-                        );
-
-                    }
-                }
-
-               
-                Monitor.Exit(this);
-                return new TentativeReply
-                {
-                    Acknowledge = ack,
-                };
-            } catch (Exception e)
-            {
-                Console.WriteLine(e.StackTrace);
-                return null;
+                Monitor.Wait(this);
             }
-           
+            
+            Console.WriteLine($"({request.Command.Slot})    Tentative(id={request.ProcessId},seq={request.Command.SequenceNumber})");
+
+            bool ack = true;
+            // Sender is primary of the slot
+            if (this.primaryPerSlot[request.Command.Slot] == request.ProcessId)
+            {
+                // Primary hasn't changed since the command was sent
+                foreach (KeyValuePair<int, int> primary in this.primaryPerSlot)
+                {
+                    if (primary.Key > request.Command.Slot && primary.Value != this.primaryPerSlot[request.Command.Slot])
+                    {
+                        ack = false;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                ack = false;
+            }
+
+            (int, int) key = (request.Command.ClientId, request.Command.SequenceNumber);
+            ClientCommand newCommand = new ClientCommand(
+                request.Command.Slot,
+                request.Command.ClientId,
+                request.Command.ClientSequenceNumber,
+                request.Command.SequenceNumber,
+                (CommandType)request.Command.Type,
+                request.Command.Value
+            );
+
+            // TODO: Verify correctness
+            // Add to tentative dictionary
+            if (ack)
+            {
+                // Command is new
+                if(!this.tentativeCommands.ContainsKey(key))
+                {
+                    this.tentativeCommands.Add(key, newCommand);
+
+                } 
+                // Command is not new but is tentative from a more recent slot
+                else if(this.tentativeCommands[key].Slot < request.Command.Slot)
+                {
+                    this.tentativeCommands.Remove(key);
+                    this.tentativeCommands.Add(key, newCommand);
+                }
+            }
+
+            Monitor.Exit(this);
+            return new TentativeReply
+            {
+                Acknowledge = ack,
+            }; 
         }
 
         public CommitReply Commit(CommitRequest request)
         {
-            Console.WriteLine($"Commit from {request.ProcessId} in slot {request.Command.Slot} with sequence number {request.Command.SequenceNumber} to {request.Command.Type}");
-
             Monitor.Enter(this);
 
             while (this.isFrozen)
@@ -441,7 +408,14 @@ namespace BankServer.Services
                 Monitor.Wait(this);
             }
 
-            // TODO: should verify if command with lower sequence number was already committed             
+            Console.WriteLine($"({request.Command.Slot})        Commit(id={request.ProcessId},seq={request.Command.SequenceNumber},cId={request.Command.ClientId},cSeq={request.Command.ClientSequenceNumber})");
+
+            // Because commands are committed in order, count == sequence number - 1
+            // IF THERE ARE NO HOLES (TODO: Verify if there is a possibility of holes)
+            while (this.committedCommands.Count < request.Command.SequenceNumber-1)
+            {
+                Monitor.Wait(this);
+            }
 
             switch (request.Command.Type)
             {
@@ -478,13 +452,13 @@ namespace BankServer.Services
         /*
          * Two Phase Commit Service (Client) Implementation
          * Communication between BankServer and BankServer
-         * TODO: Work in progress
          */
 
         public void Do2PC(ClientCommand command)
         {
-            Console.WriteLine("Starting 2PC");
-            
+            Console.WriteLine($"({command.Slot}) 2PC(cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
+
+            // keep sequence number local to ensure tentative and commit are called with the same sequence number
             int sequenceNumber = this.currentSequenceNumber;
             sequenceNumber++;
 
@@ -492,18 +466,17 @@ namespace BankServer.Services
             {
                 SendCommitRequest(sequenceNumber, command);
                 this.currentSequenceNumber = sequenceNumber;
+                Console.WriteLine($"({command.Slot}) OK 2PC(cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
             } else
             {
-                Console.WriteLine("Tentative rejected");
+                //  TODO: If tentative fails, idk
+                Console.WriteLine($"({command.Slot}) NOK 2PC(cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
             }
-            //  TODO: If tentative fails, idk
-
-            Console.WriteLine("Finished 2PC");
         }
         
         public bool SendTentativeRequest(int sequenceNumber, ClientCommand command)
         {
-            Console.WriteLine("Sending tentatives.");
+            Console.WriteLine($"({command.Slot}) Sending tentatives (cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
 
             TentativeRequest tentativeRequest = new TentativeRequest
             {
@@ -552,12 +525,13 @@ namespace BankServer.Services
                 if (reply.Acknowledge)
                     acknowledges++;
             }
+
             return acknowledges >= majority;
         }
 
         public void SendCommitRequest(int sequenceNumber, ClientCommand command)
         {
-            Console.WriteLine("Sending commits.");
+            Console.WriteLine($"({command.Slot}) Sending commits (seq={sequenceNumber},cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
 
             CommitRequest commitRequest = new CommitRequest
             {
@@ -582,7 +556,7 @@ namespace BankServer.Services
                     try
                     {
                         CommitReply commitReply = host.Value.Commit(commitRequest);
-                        Console.WriteLine("Received commit reply");                    }
+                    }
                     catch (Grpc.Core.RpcException e)
                     {
                         Console.WriteLine(e.Status);
@@ -595,13 +569,10 @@ namespace BankServer.Services
         /*
          * Cleanup Service (Server) Implementation
          * Communication between BankServer and BankServer
-         * TODO: Work in progress
          */
 
         public ListPendingRequestsReply ListPendingRequests(ListPendingRequestsRequest request)
         {
-            // TODO: why do we send the lastKnownSequenceNumber ?
-
             Monitor.Enter(this);
 
             while (this.isFrozen)
@@ -626,7 +597,6 @@ namespace BankServer.Services
                     });
                 }
             }
-            Console.WriteLine("Sending tentative commands = " + tentativeCommands.Count);
             
             Monitor.Exit(this);
             return new ListPendingRequestsReply
@@ -638,26 +608,23 @@ namespace BankServer.Services
         /*
          * Cleanup Service (Client) Implementation
          * Communication between BankServer and BankServer
-         * TODO: Work in progress
          */
         
         public void DoCleanup()
         {
 
             Console.WriteLine("Starting cleanup");
+            
             this.isCleanning = true;
+            
             List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
 
             foreach (ClientCommand command in clientCommands)
             {
+                // command slot may be outdated
                 command.Slot = this.currentSlot;
                 Do2PC(command);
             }
-
-
-
-            // TODO do 2PC for every command in clientCommands with correct sequence number
-
 
             Monitor.Enter(this);
             this.isCleanning = false;
@@ -667,7 +634,7 @@ namespace BankServer.Services
 
         public List<ClientCommand> SendListPendingRequestsRequest()
         {
-            Console.WriteLine("Sending list pending requests.");
+            Console.WriteLine("Sending list pending requests");
 
             // TODO: o currentSequenceNumber pode ser diferente do comando mais recente committed
             // (pode ja ter enviado commits mas ainda nao ter recebido)
@@ -708,7 +675,6 @@ namespace BankServer.Services
             List<ClientCommand> commands = new List<ClientCommand>();
             foreach (ListPendingRequestsReply reply in replies)
             {
-                Console.WriteLine($"processing reply with {reply.Commands.Count} commands");
                 foreach (Command command in reply.Commands)
                 {
                     // Two commands are the same if they have the same clientId and clientSequenceNumber
@@ -734,12 +700,7 @@ namespace BankServer.Services
                 return c1.SequenceNumber.CompareTo(c2.SequenceNumber);
             });
 
-            Console.WriteLine("Total commands received = " + commands.Count);
-            // Print all commands form commands list, printing the sequence number and slot
-            foreach (ClientCommand command in commands)
-            {
-                Console.WriteLine("Command: " + command.ClientId + " " + command.ClientSequenceNumber + " " + command.Slot);
-            }
+            Console.WriteLine($"Received {commands.Count} pending request");
 
             return commands;
         }

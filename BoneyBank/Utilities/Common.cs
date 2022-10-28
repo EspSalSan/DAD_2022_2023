@@ -36,10 +36,8 @@ namespace Utilities
     {
         public List<BankProcess> BankServers { get; }
         public List<BankProcess> BoneyServers { get; }
-        public int NumberOfProcesses { get; }
-
+        public int NumberOfProcesses { get; }    
         public (int, TimeSpan) SlotDetails { get; }
-
         public Dictionary<int, ProcessState>[] ProcessStates { get; }
 
         public BoneyBankConfig(List<BankProcess> bankServers, List<BankProcess> boneyServers, int numberOfProcesses, int slotDuration, TimeSpan startTime, Dictionary<int, ProcessState>[] processStates)

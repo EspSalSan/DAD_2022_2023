@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Utilities;
@@ -16,15 +15,15 @@ namespace PuppetMaster
 
         static Process StartProcess(string path, string args)
         {
-            ProcessStartInfo p_info = new ProcessStartInfo();
+            ProcessStartInfo pInfo = new ProcessStartInfo();
 
-            p_info.UseShellExecute = true;
-            p_info.CreateNoWindow = false;
-            p_info.WindowStyle = ProcessWindowStyle.Normal;
-            p_info.FileName = path;
-            p_info.Arguments = args;
+            pInfo.UseShellExecute = true;
+            pInfo.CreateNoWindow = false;
+            pInfo.WindowStyle = ProcessWindowStyle.Normal;
+            pInfo.FileName = path;
+            pInfo.Arguments = args;
 
-            return Process.Start(p_info);
+            return Process.Start(pInfo);
         }
 
         static Process CreateProcess(string[] configArgs)
@@ -37,10 +36,11 @@ namespace PuppetMaster
 
             string id = configArgs[1];
             string name = configArgs[2];
-
+            
             if (name.Equals("client"))
             {
-                return StartProcess(clientPath, id);
+                string script = configArgs[3];
+                return StartProcess(clientPath, id + " " + script);
             }
             else if (name.Equals("boney") || name.Equals("bank"))
             {

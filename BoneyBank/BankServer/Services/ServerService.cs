@@ -26,7 +26,7 @@ namespace BankServer.Services
         private int balance;
         private bool isCleanning;
         private int currentSequenceNumber;
-        // TODO: probably devem ser listas e queues e nao dict
+
         // key (clientId, clientSequenceNumber)
         private readonly Dictionary<(int, int), ClientCommand> receivedCommands;
         private readonly Dictionary<(int, int), ClientCommand> tentativeCommands;
@@ -111,6 +111,7 @@ namespace BankServer.Services
                     Monitor.Exit(this);
                     DoCleanup();
                     Monitor.Enter(this);
+                    Monitor.PulseAll(this);
                 }
                 Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
             }
@@ -130,7 +131,7 @@ namespace BankServer.Services
             Monitor.Enter(this);
 
             ClientCommand command = new ClientCommand(
-                this.currentSlot,
+                this.totalSlots == 0 ? 1 : this.currentSlot,
                 request.ClientId,
                 request.ClientSequenceNumber,
                 -1,
@@ -138,7 +139,7 @@ namespace BankServer.Services
                 request.Value
             );
 
-            while (this.isFrozen)
+            while (this.isFrozen || this.isCleanning || this.totalSlots == 0)
             {
                 Monitor.Wait(this);
             }
@@ -157,7 +158,6 @@ namespace BankServer.Services
                 Do2PC(command);
                 Monitor.Enter(this);
             }
-
 
             // Wait for command to be committed (and applied) before sending response
             while (!this.committedCommands.ContainsKey((command.ClientId, command.ClientSequenceNumber)))
@@ -180,7 +180,7 @@ namespace BankServer.Services
             Monitor.Enter(this);
 
             ClientCommand command = new ClientCommand(
-                this.currentSlot,
+                this.totalSlots == 0 ? 1 : this.currentSlot,
                 request.ClientId,
                 request.ClientSequenceNumber,
                 -1,
@@ -188,9 +188,9 @@ namespace BankServer.Services
                 request.Value
             );
 
-            while (this.isFrozen)
+            while (this.isFrozen || this.isCleanning || this.totalSlots == 0)
             {
-                Monitor.Wait(this);  // wait until not frozen
+                Monitor.Wait(this); 
             }
             
             Console.WriteLine($"Withdraw ({request.Value}) from ({request.ClientId},{request.ClientSequenceNumber})");
@@ -231,15 +231,20 @@ namespace BankServer.Services
         public ReadReply ReadBalance(ReadRequest request)
         {
             Monitor.Enter(this);
-            while (this.isFrozen)
+            
+            while (this.isFrozen || this.isCleanning || this.totalSlots == 0)
             {
-                Monitor.Wait(this);                 // wait until not frozen
+                Monitor.Wait(this);              
             }
 
             Console.WriteLine($"Read from ({request.ClientId},{request.ClientSequenceNumber})");
-            
-            // Para prevenir reads antigos deviamos confirmar se todos os comandos
-            // deste cliente já foram executados OU fazer 2PC deles
+
+            // Wait for last client command to be committed (and applied) before sending response
+            // Reads are consistent for the client
+            while (!this.committedCommands.ContainsKey((request.ClientId, request.ClientSequenceNumber - 1)))
+            {
+                Monitor.Wait(this);
+            }
 
             ReadReply reply = new ReadReply
             {
@@ -612,24 +617,21 @@ namespace BankServer.Services
         
         public void DoCleanup()
         {
-
             Console.WriteLine("Starting cleanup");
             
             this.isCleanning = true;
             
+            // every tentative command from replicas
             List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
 
             foreach (ClientCommand command in clientCommands)
             {
-                // command slot may be outdated
+                // command slot may be outdated, needs update
                 command.Slot = this.currentSlot;
                 Do2PC(command);
             }
 
-            Monitor.Enter(this);
             this.isCleanning = false;
-            Monitor.PulseAll(this);
-            Monitor.Exit(this);
         }
 
         public List<ClientCommand> SendListPendingRequestsRequest()

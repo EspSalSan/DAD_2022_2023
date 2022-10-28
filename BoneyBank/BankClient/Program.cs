@@ -1,6 +1,8 @@
-﻿using Grpc.Net.Client;
+﻿using Google.Protobuf.WellKnownTypes;
+using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Utilities;
@@ -41,6 +43,7 @@ namespace BankClient
                    {
                        DepositReply depositReply = host.Value.Deposit(depositRequest);
                        Console.WriteLine(
+                           $"   ({processId},{clientSequenceNumber}) " +
                            $"Balance {depositReply.Balance} ({(depositReply.Primary ? "primary" : "secondary")})"
                        );
                    }
@@ -55,8 +58,6 @@ namespace BankClient
                tasks.Add(t);
             }
 
-            // TODO: Idealmente espera pela task do primario
-            // Como fazer isso ?
             // Clients wait for only one response
             Task.WaitAny(tasks.ToArray());
         }
@@ -89,6 +90,7 @@ namespace BankClient
                     {
                         WithdrawReply withdrawReply = host.Value.Withdraw(withdrawRequest);
                         Console.WriteLine(
+                           $"   ({processId},{clientSequenceNumber}) " +
                            $"Withdrew {withdrawReply.Value} | Balance {withdrawReply.Balance} ({(withdrawReply.Primary ? "primary" : "secondary")})"
                         );
                     }
@@ -174,6 +176,7 @@ namespace BankClient
 
             // Command Line Arguments
             int processId = int.Parse(args[0]);
+            string scriptName = args[1];
 
             // Data from config file
             BoneyBankConfig config = Common.ReadConfig();
@@ -184,14 +187,18 @@ namespace BankClient
                 return new Bank.BankClient(channel);
             });
 
+            // Read config file
+            string scriptFilePath = Path.Join("BankClient", "Scripts", scriptName+".txt");
+            string[] lines = File.ReadAllLines(scriptFilePath);
+
             int clientSequenceNumber = 0;
 
             Console.WriteLine($"Bank Client ({processId})");
-            Console.WriteLine($"It's functional but not yet completed.");
 
-            while (true) {
+            //while (true) {
+            foreach (string line in lines) { 
 
-                string line = Console.ReadLine();
+                //string line = Console.ReadLine();
                 string[] commandArgs = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
                 if (commandArgs.Length == 0) { continue; }
@@ -200,19 +207,23 @@ namespace BankClient
                 {
                     case "D":
                         clientSequenceNumber++;
+                        Console.WriteLine($"({processId},{clientSequenceNumber}) Deposit {commandArgs[1]}");
                         SendDepositRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     case "W":
                         clientSequenceNumber++;
+                        Console.WriteLine($"({processId},{clientSequenceNumber}) Withdraw {commandArgs[1]}");
                         SendWithdrawRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     case "R":
+                        Console.WriteLine($"Read");
                         SendReadBalanceRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
                     case "S":
+                        Console.WriteLine($"Sleep");
                         Sleep(commandArgs);
                         break;
 
@@ -221,6 +232,8 @@ namespace BankClient
                         break;
                 }
             }
+
+            System.Threading.Thread.Sleep(-1); // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         }
     }
 }

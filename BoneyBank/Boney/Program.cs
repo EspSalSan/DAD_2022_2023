@@ -44,7 +44,7 @@ namespace Boney
             // Process data from config file to send to serverService
             int numberOfProcesses = config.NumberOfProcesses;
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
-            Dictionary<int, Paxos.PaxosClient> boneyHosts = config.BoneyServers.ToDictionary(
+            Dictionary<int, Paxos.PaxosClient> boneyHosts = config.BoneyProcesses.ToDictionary(
                 key => key.Id,
                 value => new Paxos.PaxosClient(GrpcChannel.ForAddress(value.Address))
             );

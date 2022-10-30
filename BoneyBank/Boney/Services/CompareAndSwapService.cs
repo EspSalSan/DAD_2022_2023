@@ -5,7 +5,7 @@ namespace Boney.Services
 {
     public class CompareAndSwapService : CompareAndSwap.CompareAndSwapBase
     {
-        private ServerService serverService;
+        private readonly ServerService serverService;
 
         public CompareAndSwapService(ServerService serverService)
         {

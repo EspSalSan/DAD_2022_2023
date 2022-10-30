@@ -7,12 +7,6 @@ namespace PuppetMaster
 {
     internal class Program
     {
-        static string GetSolutionDir()
-        {
-            // Leads to /BoneyBank
-            return Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent?.Parent?.Parent?.Parent?.FullName;
-        }
-
         static Process StartProcess(string path, string args)
         {
             ProcessStartInfo pInfo = new ProcessStartInfo();
@@ -26,12 +20,11 @@ namespace PuppetMaster
             return Process.Start(pInfo);
         }
 
-        static Process CreateProcess(string[] configArgs)
+        static Process CreateProcess(string baseDirectory, string[] configArgs)
         {
-            // Not MacOS friendly because it compiles to .dll and not .exe
-            string baseDirectory = GetSolutionDir();
+            // Not MacOS friendly because it compiles to .exe
             string clientPath = Path.Combine(baseDirectory, "BankClient", "bin", "Debug", "netcoreapp3.1", "BankClient.exe");
-            string serverPath = Path.Combine(baseDirectory, "BankServer", "bin", "Debug", "netcoreapp3.1", "BankServer.exe");
+            string bankPath = Path.Combine(baseDirectory, "BankServer", "bin", "Debug", "netcoreapp3.1", "BankServer.exe");
             string boneyPath = Path.Combine(baseDirectory, "Boney", "bin", "Debug", "netcoreapp3.1", "Boney.exe");
 
             string id = configArgs[1];
@@ -52,7 +45,7 @@ namespace PuppetMaster
 
                 if (name.Equals("bank"))
                 {
-                    return StartProcess(serverPath, id + " " + host + " " + port);
+                    return StartProcess(bankPath, id + " " + host + " " + port);
                 }
                 else
                 {
@@ -82,7 +75,7 @@ namespace PuppetMaster
                 string[] configArgs = line.Split(" ");
 
                 if (configArgs[0].Equals("P"))
-                    CreateProcess(configArgs);
+                    CreateProcess(baseDirectory, configArgs);
             }
         }
     }

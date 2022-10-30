@@ -5,7 +5,7 @@ namespace BankServer.Services
 {
     public class BankService : Bank.BankBase
     {
-        private ServerService serverService;
+        private readonly ServerService serverService;
 
         public BankService(ServerService serverService)
         {

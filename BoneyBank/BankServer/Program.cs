@@ -45,11 +45,11 @@ namespace BankServer
             // Process data from config file to send to serverService
             int numberOfProcesses = config.NumberOfProcesses;
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
-            Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankServers.ToDictionary(
+            Dictionary<int, TwoPhaseCommit.TwoPhaseCommitClient> bankHosts = config.BankProcesses.ToDictionary(
                 key => key.Id,
                 value => new TwoPhaseCommit.TwoPhaseCommitClient(GrpcChannel.ForAddress(value.Address))
             );
-            Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts = config.BoneyServers.ToDictionary(
+            Dictionary<int, CompareAndSwap.CompareAndSwapClient> boneyHosts = config.BoneyProcesses.ToDictionary(
                 key => key.Id,
                 value => new CompareAndSwap.CompareAndSwapClient(GrpcChannel.ForAddress(value.Address))
             );

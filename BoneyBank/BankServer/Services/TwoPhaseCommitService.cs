@@ -5,7 +5,7 @@ namespace BankServer.Services
 {
     public class TwoPhaseCommitService : TwoPhaseCommit.TwoPhaseCommitBase
     {
-        private ServerService serverService;
+        private readonly ServerService serverService;
 
         public TwoPhaseCommitService(ServerService serverService)
         {

@@ -6,13 +6,13 @@ using System.Text.RegularExpressions;
 
 namespace Utilities
 {
-    public struct BankProcess
+    public struct ProcessInfo
     {
         public int Id { get; }
         public string Type { get; }
         public string Address { get; }
 
-        public BankProcess(int id, string type, string address)
+        public ProcessInfo(int id, string type, string address)
         {
             Id = id;
             Type = type;
@@ -34,17 +34,17 @@ namespace Utilities
 
     public struct BoneyBankConfig
     {
-        public List<BankProcess> BankServers { get; }
-        public List<BankProcess> BoneyServers { get; }
+        public List<ProcessInfo> BankProcesses { get; }
+        public List<ProcessInfo> BoneyProcesses { get; }
         public int NumberOfProcesses { get; }    
         public (int, TimeSpan) SlotDetails { get; }
         public Dictionary<int, ProcessState>[] ProcessStates { get; }
 
-        public BoneyBankConfig(List<BankProcess> bankServers, List<BankProcess> boneyServers, int numberOfProcesses, int slotDuration, TimeSpan startTime, Dictionary<int, ProcessState>[] processStates)
+        public BoneyBankConfig(List<ProcessInfo> bankProcesses, List<ProcessInfo> boneyProcesses, int slotDuration, TimeSpan startTime, Dictionary<int, ProcessState>[] processStates)
         {
-            BankServers = bankServers;
-            BoneyServers = boneyServers;
-            NumberOfProcesses = numberOfProcesses;
+            BankProcesses = bankProcesses;
+            BoneyProcesses = boneyProcesses;
+            NumberOfProcesses = bankProcesses.Count + boneyProcesses.Count;
             SlotDetails = (slotDuration, startTime);
             ProcessStates = processStates;
         }
@@ -65,11 +65,10 @@ namespace Utilities
             string[] lines = File.ReadAllLines(configFilePath);
 
             int slotDuration = -1;
-            int numberOfProcesses = 0;
             TimeSpan startTime = new TimeSpan();
             Dictionary<int, ProcessState>[] processStates = null;
-            List<BankProcess> bankServers = new List<BankProcess>();
-            List<BankProcess> boneyServers = new List<BankProcess>();
+            List<ProcessInfo> bankProcesses = new List<ProcessInfo>();
+            List<ProcessInfo> boneyProcesses = new List<ProcessInfo>();
 
             Regex rg = new Regex(@"(\([^0-9]*\d+[^0-9]*\))");
 
@@ -79,16 +78,15 @@ namespace Utilities
 
                 if (args[0].Equals("P") && !args[2].Equals("client"))
                 {
-                    numberOfProcesses++;
                     int processId = int.Parse(args[1]);
-                    BankProcess bankProcess = new BankProcess(processId, args[2], args[3]);
+                    ProcessInfo processInfo = new ProcessInfo(processId, args[2], args[3]);
                     switch (args[2])
                     {
                         case "bank":
-                            bankServers.Add(bankProcess);
+                            bankProcesses.Add(processInfo);
                             break;
                         case "boney":
-                            boneyServers.Add(bankProcess);
+                            boneyProcesses.Add(processInfo);
                             break;
                     }
                 }
@@ -128,7 +126,7 @@ namespace Utilities
                     }
                 }
             }
-            return new BoneyBankConfig(bankServers, boneyServers, numberOfProcesses, slotDuration, startTime, processStates);
+            return new BoneyBankConfig(bankProcesses, boneyProcesses, slotDuration, startTime, processStates);
         }
     }
 }

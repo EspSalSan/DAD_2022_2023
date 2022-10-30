@@ -26,9 +26,7 @@ namespace BankServer.Services
         private int balance;
         private bool isCleanning;
         private int currentSequenceNumber;
-
-        // key (clientId, clientSequenceNumber)
-        private readonly Dictionary<(int, int), ClientCommand> receivedCommands;
+        private readonly Dictionary<(int, int), ClientCommand> receivedCommands;  // key: (clientId, clientSequenceNumber)
         private readonly Dictionary<(int, int), ClientCommand> tentativeCommands;
         private readonly Dictionary<(int, int), ClientCommand> committedCommands;
 
@@ -238,6 +236,8 @@ namespace BankServer.Services
             }
 
             Console.WriteLine($"Read from ({request.ClientId},{request.ClientSequenceNumber})");
+
+            // TODO: Devia ser committed ?
 
             // Wait for last client command to be committed (and applied) before sending response
             // Reads are consistent for the client
@@ -467,14 +467,15 @@ namespace BankServer.Services
             int sequenceNumber = this.currentSequenceNumber;
             sequenceNumber++;
 
-            if (SendTentativeRequest(sequenceNumber, command))
+            // If primary changes after sending tentatives, abort  TODO: confirm
+            if (SendTentativeRequest(sequenceNumber, command) && this.primaryPerSlot[this.currentSlot] == this.processId)
             {
                 SendCommitRequest(sequenceNumber, command);
                 this.currentSequenceNumber = sequenceNumber;
                 Console.WriteLine($"({command.Slot}) OK 2PC(cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
-            } else
+            } 
+            else
             {
-                //  TODO: If tentative fails, idk
                 Console.WriteLine($"({command.Slot}) NOK 2PC(cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
             }
         }
@@ -625,13 +626,15 @@ namespace BankServer.Services
             List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
 
             foreach (ClientCommand command in clientCommands)
-            {
+            {    
                 // command slot may be outdated, needs update
                 command.Slot = this.currentSlot;
                 Do2PC(command);
             }
 
             this.isCleanning = false;
+
+            Console.WriteLine("Finished cleanup");
         }
 
         public List<ClientCommand> SendListPendingRequestsRequest()

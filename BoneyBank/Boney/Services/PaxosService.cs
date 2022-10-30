@@ -5,7 +5,7 @@ namespace Boney.Services
 {
     public class PaxosService : Paxos.PaxosBase
     {
-        private ServerService serverService;
+        private readonly ServerService serverService;
 
         public PaxosService(ServerService serverService)
         {

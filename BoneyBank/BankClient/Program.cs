@@ -36,6 +36,7 @@ namespace BankClient
             };
 
             // Send request to all bank processes
+            bool primaryReplied = false;
             List<Task> tasks = new List<Task>();
             foreach (var host in bankHosts)
             {
@@ -43,10 +44,23 @@ namespace BankClient
                    try
                    {
                        DepositReply depositReply = host.Value.Deposit(depositRequest);
-                       Console.WriteLine(
-                           $"   ({processId},{clientSequenceNumber}) " +
-                           $"Balance {depositReply.Balance} ({(depositReply.Primary ? "primary" : "secondary")})"
-                       );
+                       if (depositReply.Primary)
+                       {
+                           Console.WriteLine(
+                               $"   ({processId},{clientSequenceNumber}) " +
+                               $"Balance {depositReply.Balance} (primary)"
+                            );
+                           primaryReplied = true;
+
+                       }
+                       else
+                       {
+                           Console.WriteLine(
+                               $"   ({processId},{clientSequenceNumber}) " +
+                               $"(secondary)"
+                            );
+                       }
+                       
                    }
                    catch (Grpc.Core.RpcException e)
                    {
@@ -59,8 +73,11 @@ namespace BankClient
                tasks.Add(t);
             }
 
-            // Clients wait for only one response
-            Task.WaitAny(tasks.ToArray());
+            // Wait for primary reply
+            while (!primaryReplied)
+            {
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+            }
         }
 
         static void SendWithdrawRequest(int processId, int clientSequenceNumber, string[] commandArgs, BankHosts bankHosts)
@@ -84,6 +101,7 @@ namespace BankClient
                 Value = value 
             };
 
+            bool primaryReplied = false;
             // Send request to all bank processes
             List<Task> tasks = new List<Task>();
             foreach (var host in bankHosts)
@@ -92,10 +110,21 @@ namespace BankClient
                     try
                     {
                         WithdrawReply withdrawReply = host.Value.Withdraw(withdrawRequest);
-                        Console.WriteLine(
-                           $"   ({processId},{clientSequenceNumber}) " +
-                           $"Withdrew {withdrawReply.Value} | Balance {withdrawReply.Balance} ({(withdrawReply.Primary ? "primary" : "secondary")})"
-                        );
+                        if (withdrawReply.Primary)
+                        {
+                            Console.WriteLine(
+                                $"   ({processId},{clientSequenceNumber}) " +
+                                $"Withdrew {withdrawReply.Value} | Balance {withdrawReply.Balance} (primary)"
+                             );
+                            primaryReplied = true;
+                        }
+                        else
+                        {
+                            Console.WriteLine(
+                                $"   ({processId},{clientSequenceNumber}) " +
+                                $"(secondary)"
+                             );
+                        }
                     }
                     catch (Grpc.Core.RpcException e)
                     {
@@ -108,8 +137,11 @@ namespace BankClient
                 tasks.Add(t);
             }
 
-            // Clients wait for only one response
-            Task.WaitAny(tasks.ToArray());
+            // Wait for primary reply
+            while (!primaryReplied)
+            {
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+            }
         }
 
         static void SendReadBalanceRequest(int processId, int clientSequenceNumber, string[] commandArgs, BankHosts bankHosts)
@@ -127,6 +159,7 @@ namespace BankClient
                 ClientSequenceNumber = clientSequenceNumber,
             };
 
+            bool primaryReplied = false;
             // Send request to all bank processes
             List<Task> tasks = new List<Task>();
             foreach (var host in bankHosts)
@@ -135,10 +168,21 @@ namespace BankClient
                     try
                     {
                         ReadReply readReply = host.Value.Read(readRequest);
-                        Console.WriteLine(
-                           $"   ({processId}) " +
-                           $"Balance {readReply.Balance} ({(readReply.Primary ? "primary" : "secondary")})"
-                        );
+                        if (readReply.Primary)
+                        {
+                            Console.WriteLine(
+                                $"   ({processId},{clientSequenceNumber}) " +
+                                $"Balance {readReply.Balance} (primary)"
+                             );
+                            primaryReplied = true;
+                        }
+                        else
+                        {
+                            Console.WriteLine(
+                                $"   ({processId},{clientSequenceNumber}) " +
+                                $"(secondary)"
+                             );
+                        }
                     }
                     catch (Grpc.Core.RpcException e)
                     {
@@ -151,8 +195,11 @@ namespace BankClient
                 tasks.Add(t);
             }
 
-            // Clients wait for only one response
-            Task.WaitAny(tasks.ToArray());
+            // Wait for primary reply
+            while (!primaryReplied)
+            {
+                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+            }
         }
 
         static void Sleep(string[] commandArgs)

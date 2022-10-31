@@ -11,6 +11,7 @@
         private int slot;
         private int value;
         private int clientId;
+        private bool success;
         private CommandType type;
         private int sequenceNumber;
         private int clientSequenceNumber;
@@ -18,11 +19,12 @@
         public ClientCommand(int slot, int clientId, int clientSequenceNumber, int sequenceNumber, CommandType type, int value)
         {
             this.slot = slot;
-            this.clientId = clientId;
-            this.clientSequenceNumber = clientSequenceNumber;
-            this.sequenceNumber = sequenceNumber;
             this.type = type;
             this.value = value;
+            this.success = false;
+            this.clientId = clientId;
+            this.sequenceNumber = sequenceNumber;
+            this.clientSequenceNumber = clientSequenceNumber;
         }
 
         public int Slot { get => slot; set => this.slot = value; }
@@ -31,5 +33,6 @@
         public int ClientId { get => clientId; set => clientId = value; }
         public int ClientSequenceNumber { get => clientSequenceNumber; set => clientSequenceNumber = value; }
         public int SequenceNumber { get => sequenceNumber; set => sequenceNumber = value; }
+        public bool Success { get => success; set => success = value; }
     }
 }

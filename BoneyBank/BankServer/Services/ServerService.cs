@@ -25,9 +25,8 @@ namespace BankServer.Services
         // Replication variables
         private int balance;
         private bool isCleanning;
-        private int currentSequenceNumber;
-        private readonly Dictionary<(int, int), ClientCommand> receivedCommands;  // key: (clientId, clientSequenceNumber)
-        private readonly Dictionary<(int, int), ClientCommand> tentativeCommands;
+        private int currentSequenceNumber; 
+        private readonly Dictionary<(int, int), ClientCommand> tentativeCommands; // key: (clientId, clientSequenceNumber)
         private readonly Dictionary<(int, int), ClientCommand> committedCommands;
 
         public ServerService(
@@ -52,7 +51,6 @@ namespace BankServer.Services
             this.primaryPerSlot = new Dictionary<int,int>();
 
             this.isCleanning = false;
-            this.receivedCommands = new Dictionary<(int, int), ClientCommand>();
             this.tentativeCommands = new Dictionary<(int, int), ClientCommand>();
             this.committedCommands = new Dictionary<(int, int), ClientCommand>();
         }
@@ -105,11 +103,8 @@ namespace BankServer.Services
                     )
                 {
                     Console.WriteLine($"Leader changed from {this.primaryPerSlot[this.currentSlot - 1]} to {this.primaryPerSlot[this.currentSlot]}");
-
-                    Monitor.Exit(this);
+                    // Locks are released and reacquired during Cleanup to allow progress 
                     DoCleanup();
-                    Monitor.Enter(this);
-                    Monitor.PulseAll(this);
                 }
                 Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
             }
@@ -143,11 +138,6 @@ namespace BankServer.Services
             }
             
             Console.WriteLine($"Deposit ({request.Value}) from ({request.ClientId},{request.ClientSequenceNumber})");
-
-            this.receivedCommands.Add(
-               (command.ClientId, command.ClientSequenceNumber),
-               command
-            );
 
             // If leader for the current slot (and command is from the current slot), start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
@@ -193,14 +183,6 @@ namespace BankServer.Services
             
             Console.WriteLine($"Withdraw ({request.Value}) from ({request.ClientId},{request.ClientSequenceNumber})");
 
-            this.receivedCommands.Add(
-               (command.ClientId, command.ClientSequenceNumber),
-               command
-            );
-
-            // Read current balance to latter verify if withdraw as succesful
-            int lastBalance = this.balance;
-
             // If leader for the current slot, start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
             {
@@ -215,9 +197,11 @@ namespace BankServer.Services
                 Monitor.Wait(this);
             }
 
+            bool success = this.committedCommands[(command.ClientId, command.ClientSequenceNumber)].Success;
+
             WithdrawReply reply = new WithdrawReply
             {
-                Value = lastBalance == this.balance ? 0 :request.Value,
+                Value = success ? request.Value : 0,
                 Balance = this.balance,
                 Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
             };
@@ -236,15 +220,6 @@ namespace BankServer.Services
             }
 
             Console.WriteLine($"Read from ({request.ClientId},{request.ClientSequenceNumber})");
-
-            // TODO: Devia ser committed ?
-
-            // Wait for last client command to be committed (and applied) before sending response
-            // Reads are consistent for the client
-            while (!this.committedCommands.ContainsKey((request.ClientId, request.ClientSequenceNumber - 1)))
-            {
-                Monitor.Wait(this);
-            }
 
             ReadReply reply = new ReadReply
             {
@@ -348,7 +323,7 @@ namespace BankServer.Services
                 Monitor.Wait(this);
             }
             
-            Console.WriteLine($"({request.Command.Slot})    Tentative(id={request.ProcessId},seq={request.Command.SequenceNumber})");
+            Console.WriteLine($"({request.Command.Slot})    Tentative(id={request.ProcessId},cId={request.Command.ClientId},cSeq={request.Command.ClientSequenceNumber})");
 
             bool ack = true;
             // Sender is primary of the slot
@@ -369,7 +344,7 @@ namespace BankServer.Services
                 ack = false;
             }
 
-            (int, int) key = (request.Command.ClientId, request.Command.SequenceNumber);
+            (int, int) key = (request.Command.ClientId, request.Command.ClientSequenceNumber);
             ClientCommand newCommand = new ClientCommand(
                 request.Command.Slot,
                 request.Command.ClientId,
@@ -387,7 +362,6 @@ namespace BankServer.Services
                 if(!this.tentativeCommands.ContainsKey(key))
                 {
                     this.tentativeCommands.Add(key, newCommand);
-
                 } 
                 // Command is not new but is tentative from a more recent slot
                 else if(this.tentativeCommands[key].Slot < request.Command.Slot)
@@ -395,6 +369,7 @@ namespace BankServer.Services
                     this.tentativeCommands.Remove(key);
                     this.tentativeCommands.Add(key, newCommand);
                 }
+                Monitor.PulseAll(this);
             }
 
             Monitor.Exit(this);
@@ -413,38 +388,55 @@ namespace BankServer.Services
                 Monitor.Wait(this);
             }
 
+            (int, int) key = (request.Command.ClientId, request.Command.ClientSequenceNumber);
+
+            // Wait for command to be tentative
+            ClientCommand tentativeCommand;
+            while (!this.tentativeCommands.TryGetValue(key, out tentativeCommand))
+            {
+                Monitor.Wait(this);
+            }
+
             Console.WriteLine($"({request.Command.Slot})        Commit(id={request.ProcessId},seq={request.Command.SequenceNumber},cId={request.Command.ClientId},cSeq={request.Command.ClientSequenceNumber})");
 
             // Because commands are committed in order, count == sequence number - 1
+            // Wait for every commit before it
             // IF THERE ARE NO HOLES (TODO: Verify if there is a possibility of holes)
             while (this.committedCommands.Count < request.Command.SequenceNumber-1)
             {
                 Monitor.Wait(this);
             }
 
-            switch (request.Command.Type)
+            // Commit may be repeated and should be accepted but not applied
+            if (this.committedCommands.ContainsKey(key))
             {
-                case (Type.Deposit):
-                    this.balance += request.Command.Value;
-                    break;
-                    
-                case (Type.Withdraw):
-                    if (request.Command.Value <= this.balance)
-                    {
-                        this.balance -= request.Command.Value;
-                    }
-                    break;
+                this.committedCommands.Remove(key);
+            }
+            else
+            {
+                // Apply command
+                switch (request.Command.Type)
+                {
+                    case (Type.Deposit):
+                        this.balance += request.Command.Value;
+                        break;
+
+                    case (Type.Withdraw):
+                        if (request.Command.Value <= this.balance)
+                        {
+                            this.balance -= request.Command.Value;
+                            tentativeCommand.Success = true;
+                        }
+                        else
+                        {
+                            tentativeCommand.Success = false;
+                        }
+                        break;
+                }
             }
 
+            this.committedCommands.Add(key, tentativeCommand);
 
-            // TODO: Existe a possibilidade de o comando nunca ter estado tentative ?
-
-            // Transfer command from tentative to committed
-            (int, int) key = (request.Command.ClientId, request.Command.ClientSequenceNumber);
-            ClientCommand command = this.tentativeCommands.GetValueOrDefault(key);
-            this.tentativeCommands.Remove(key);
-            this.committedCommands.Add(key, command);
-    
             Monitor.PulseAll(this);  
             Monitor.Exit(this);
 
@@ -618,9 +610,11 @@ namespace BankServer.Services
         
         public void DoCleanup()
         {
-            Console.WriteLine("Starting cleanup");
-            
             this.isCleanning = true;
+            
+            Console.WriteLine("Starting cleanup");
+
+            Monitor.Exit(this);
             
             // every tentative command from replicas
             List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
@@ -635,6 +629,9 @@ namespace BankServer.Services
             this.isCleanning = false;
 
             Console.WriteLine("Finished cleanup");
+
+            Monitor.Enter(this);
+            Monitor.PulseAll(this);
         }
 
         public List<ClientCommand> SendListPendingRequestsRequest()

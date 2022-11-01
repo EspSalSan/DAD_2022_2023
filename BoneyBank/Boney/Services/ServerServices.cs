@@ -54,7 +54,9 @@ namespace Boney.Services
                 Console.WriteLine("Slot duration ended but no more slots to process.");
                 return;
             }
-            
+
+            Console.WriteLine("Preparing new slot -----------------------");
+
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[currentSlot];
             if (this.currentSlot > 0)
@@ -67,6 +69,7 @@ namespace Boney.Services
             // Every slot increase processId to allow progress when the system configuration changes
             this.processId += this.boneyHosts.Count;
 
+            Console.WriteLine("Ending preparation -----------------------");
             Monitor.Exit(this);
         }
 

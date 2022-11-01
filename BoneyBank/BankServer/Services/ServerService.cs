@@ -65,19 +65,24 @@ namespace BankServer.Services
         public void PrepareSlot()
         {
             Monitor.Enter(this);
-            Console.WriteLine("Preparing new slot(s) -----------------------");
+            
+            // End of slots
             if (this.totalSlots >= processFrozenPerSlot.Count)
             {
                 Console.WriteLine("Slot duration ended but no more slots to process.");
                 return;
             }
 
+            Console.WriteLine("Preparing new slot(s) -----------------------");
+
             // Switch process state
             this.isFrozen = this.processFrozenPerSlot[totalSlots];
             Console.WriteLine($"Process is now {(this.isFrozen ? "frozen" : "normal")}");
 
+            // Global slot counter
             this.totalSlots++;
 
+            // If process is frozen, it does not experience the slot
             if (this.isFrozen)
             {
                 Console.WriteLine("Ending preparation -----------------------");
@@ -93,6 +98,7 @@ namespace BankServer.Services
                 
                 Console.WriteLine($"Preparing slot {this.currentSlot}...");
                 
+                // Elect a primary process for the current slot
                 DoCompareAndSwap(this.currentSlot);
 
                 // If leader changed, do cleanup
@@ -103,8 +109,7 @@ namespace BankServer.Services
                     )
                 {
                     Console.WriteLine($"Leader changed from {this.primaryPerSlot[this.currentSlot - 1]} to {this.primaryPerSlot[this.currentSlot]}");
-                    // Locks are released and reacquired during Cleanup to allow progress 
-                    DoCleanup();
+                    DoCleanup(); 
                 }
                 Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
             }
@@ -142,9 +147,7 @@ namespace BankServer.Services
             // If leader for the current slot (and command is from the current slot), start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
             {
-                Monitor.Exit(this);
                 Do2PC(command);
-                Monitor.Enter(this);
             }
 
             // Wait for command to be committed (and applied) before sending response
@@ -186,9 +189,7 @@ namespace BankServer.Services
             // If leader for the current slot, start 2PC
             if (this.processId == this.primaryPerSlot[this.currentSlot] && command.Slot == this.currentSlot)
             {
-                Monitor.Exit(this);
                 Do2PC(command);
-                Monitor.Enter(this);
             }
 
             // Wait for command to be committed (and applied) before sending response
@@ -459,10 +460,17 @@ namespace BankServer.Services
             int sequenceNumber = this.currentSequenceNumber;
             sequenceNumber++;
 
-            // If primary changes after sending tentatives, abort  TODO: confirm
-            if (SendTentativeRequest(sequenceNumber, command) && this.primaryPerSlot[this.currentSlot] == this.processId)
+            Monitor.Exit(this);
+            bool tentativeSuccess = SendTentativeRequest(sequenceNumber, command);
+            Monitor.Enter(this);
+            
+            // If primary changes after sending tentatives, abort
+            if (tentativeSuccess && this.primaryPerSlot[this.currentSlot] == this.processId)
             {
+                Monitor.Exit(this);
                 SendCommitRequest(sequenceNumber, command);
+                Monitor.Enter(this);
+                
                 this.currentSequenceNumber = sequenceNumber;
                 Console.WriteLine($"({command.Slot}) OK 2PC(cId={command.ClientId},cSeq={command.ClientSequenceNumber})");
             } 
@@ -614,10 +622,10 @@ namespace BankServer.Services
             
             Console.WriteLine("Starting cleanup");
 
-            Monitor.Exit(this);
-            
             // every tentative command from replicas
+            Monitor.Exit(this);
             List<ClientCommand> clientCommands = SendListPendingRequestsRequest();
+            Monitor.Enter(this);
 
             foreach (ClientCommand command in clientCommands)
             {    
@@ -629,8 +637,6 @@ namespace BankServer.Services
             this.isCleanning = false;
 
             Console.WriteLine("Finished cleanup");
-
-            Monitor.Enter(this);
             Monitor.PulseAll(this);
         }
 

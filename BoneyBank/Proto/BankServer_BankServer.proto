@@ -16,7 +16,7 @@ message Command {
 	int32 clientSequenceNumber = 3;
 	int32 sequenceNumber = 4;
 	Type type = 5;
-	int32 value = 6;
+	float value = 6;
 }
 
 message TentativeRequest {

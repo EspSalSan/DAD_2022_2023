@@ -1,6 +1,7 @@
 ﻿using Grpc.Net.Client;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -20,9 +21,10 @@ namespace BankClient
                 Console.WriteLine("Invalid number of arguments.");
                 return;
             }
-            if (!int.TryParse(commandArgs[1], out int value) || value < 0)
+            float value = float.Parse(commandArgs[1], CultureInfo.InvariantCulture);
+            if (value < 0)
             {
-                Console.WriteLine("Value must be a positive integer.");
+                Console.WriteLine("Value must be a positive float.");
                 return;
             }
 
@@ -87,7 +89,8 @@ namespace BankClient
             {
                 Console.WriteLine("Invalid number of arguments");
             }
-            if (!int.TryParse(commandArgs[1], out int value) || value < 0)
+            float value = float.Parse(commandArgs[1], CultureInfo.InvariantCulture);
+            if (value < 0)
             {
                 Console.WriteLine("Value must be a positive integer.");
                 return;
@@ -242,7 +245,9 @@ namespace BankClient
             (int slotDuration, TimeSpan startTime) = config.SlotDetails;
 
             // Read client scripts
-            string scriptFilePath = Path.Join("BankClient", "Scripts", scriptName+".txt");
+            string baseDirectory = Common.GetSolutionDir();
+            string scriptFilePath = Path.Join(baseDirectory, "BankClient", "Scripts", scriptName + ".txt");
+            Console.WriteLine(scriptFilePath);
             string[] lines = File.ReadAllLines(scriptFilePath);
 
             Console.WriteLine($"Bank Client ({processId})");

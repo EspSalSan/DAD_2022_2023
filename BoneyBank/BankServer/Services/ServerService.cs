@@ -23,7 +23,7 @@ namespace BankServer.Services
         private readonly Dictionary<int,int> primaryPerSlot;
 
         // Replication variables
-        private int balance;
+        private float balance;
         private bool isCleanning;
         private int currentSequenceNumber; 
         private readonly Dictionary<(int, int), ClientCommand> tentativeCommands; // key: (clientId, clientSequenceNumber)

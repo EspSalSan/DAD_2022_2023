@@ -9,21 +9,21 @@ service Bank {
 message DepositRequest {
 	int32 clientId = 1;
 	int32 clientSequenceNumber = 2;
-	int32 value = 3;
+	float value = 3;
 }
 message DepositReply {
-	int32 balance = 1;
+	float balance = 1;
 	bool primary = 2;
 }
 
 message WithdrawRequest {
 	int32 clientId = 1;
 	int32 clientSequenceNumber = 2;
-	int32 value = 3;
+	float value = 3;
 }
 message WithdrawReply {
-	int32 value = 1;
-	int32 balance = 2;
+	float value = 1;
+	float balance = 2;
 	bool primary = 3;
 }
 
@@ -32,6 +32,6 @@ message ReadRequest {
 	int32 clientSequenceNumber = 2;
 }
 message ReadReply {
-	int32 balance = 1;
+	float balance = 1;
 	bool primary = 2;
 }

@@ -9,14 +9,14 @@
     public class ClientCommand
     {
         private int slot;
-        private int value;
+        private float value;
         private int clientId;
         private bool success;
         private CommandType type;
         private int sequenceNumber;
         private int clientSequenceNumber;
 
-        public ClientCommand(int slot, int clientId, int clientSequenceNumber, int sequenceNumber, CommandType type, int value)
+        public ClientCommand(int slot, int clientId, int clientSequenceNumber, int sequenceNumber, CommandType type, float value)
         {
             this.slot = slot;
             this.type = type;
@@ -28,7 +28,7 @@
         }
 
         public int Slot { get => slot; set => this.slot = value; }
-        public int Value { get => value; set => this.value = value; }
+        public float Value { get => value; set => this.value = value; }
         public CommandType Type { get => type; set => type = value; }
         public int ClientId { get => clientId; set => clientId = value; }
         public int ClientSequenceNumber { get => clientSequenceNumber; set => clientSequenceNumber = value; }

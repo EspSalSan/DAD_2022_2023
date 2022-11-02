@@ -1,7 +1,9 @@
 ﻿using BankServer.Domain;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,7 +25,7 @@ namespace BankServer.Services
         private readonly Dictionary<int,int> primaryPerSlot;
 
         // Replication variables
-        private float balance;
+        private decimal balance;
         private bool isCleanning;
         private int currentSequenceNumber; 
         private readonly Dictionary<(int, int), ClientCommand> tentativeCommands; // key: (clientId, clientSequenceNumber)
@@ -134,14 +136,14 @@ namespace BankServer.Services
                 request.ClientSequenceNumber,
                 -1,
                 CommandType.Deposit,
-                request.Value
+                decimal.Parse(request.Value, CultureInfo.InvariantCulture)
             );
 
             while (this.isFrozen || this.isCleanning || this.totalSlots == 0)
             {
                 Monitor.Wait(this);
             }
-            
+
             Console.WriteLine($"Deposit ({request.Value}) from ({request.ClientId},{request.ClientSequenceNumber})");
 
             // If leader for the current slot (and command is from the current slot), start 2PC
@@ -158,7 +160,7 @@ namespace BankServer.Services
 
             DepositReply reply = new DepositReply
             {
-                Balance = this.balance,
+                Balance = this.balance.ToString(CultureInfo.InvariantCulture),
                 Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
             };
             
@@ -176,7 +178,7 @@ namespace BankServer.Services
                 request.ClientSequenceNumber,
                 -1,
                 CommandType.Withdraw,
-                request.Value
+                decimal.Parse(request.Value, CultureInfo.InvariantCulture)
             );
 
             while (this.isFrozen || this.isCleanning || this.totalSlots == 0)
@@ -202,8 +204,8 @@ namespace BankServer.Services
 
             WithdrawReply reply = new WithdrawReply
             {
-                Value = success ? request.Value : 0,
-                Balance = this.balance,
+                Value = success ? request.Value : "0",
+                Balance = this.balance.ToString(CultureInfo.InvariantCulture),
                 Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
             };
   
@@ -224,7 +226,7 @@ namespace BankServer.Services
 
             ReadReply reply = new ReadReply
             {
-                Balance = balance,
+                Balance = balance.ToString(CultureInfo.InvariantCulture),
                 Primary = this.primaryPerSlot[this.currentSlot] == this.processId,
             };
 
@@ -352,7 +354,7 @@ namespace BankServer.Services
                 request.Command.ClientSequenceNumber,
                 request.Command.SequenceNumber,
                 (CommandType)request.Command.Type,
-                request.Command.Value
+                decimal.Parse(request.Command.Value, CultureInfo.InvariantCulture)
             );
 
             // TODO: Verify correctness
@@ -416,16 +418,18 @@ namespace BankServer.Services
             else
             {
                 // Apply command
+                decimal value = decimal.Parse(request.Command.Value, CultureInfo.InvariantCulture);
                 switch (request.Command.Type)
                 {
                     case (Type.Deposit):
-                        this.balance += request.Command.Value;
+                        
+                        this.balance += value;
                         break;
-
+                        
                     case (Type.Withdraw):
-                        if (request.Command.Value <= this.balance)
+                        if (value <= this.balance)
                         {
-                            this.balance -= request.Command.Value;
+                            this.balance -= value;
                             tentativeCommand.Success = true;
                         }
                         else
@@ -437,6 +441,7 @@ namespace BankServer.Services
             }
 
             this.committedCommands.Add(key, tentativeCommand);
+            this.currentSequenceNumber = tentativeCommand.SequenceNumber;
 
             Monitor.PulseAll(this);  
             Monitor.Exit(this);
@@ -467,6 +472,12 @@ namespace BankServer.Services
             // If primary changes after sending tentatives, abort
             if (tentativeSuccess && this.primaryPerSlot[this.currentSlot] == this.processId)
             {
+                // Process may get frozen in the middle of 2PC
+                while (this.isFrozen)
+                {
+                    Monitor.Wait(this);
+                }
+                
                 Monitor.Exit(this);
                 SendCommitRequest(sequenceNumber, command);
                 Monitor.Enter(this);
@@ -494,7 +505,7 @@ namespace BankServer.Services
                     ClientSequenceNumber = command.ClientSequenceNumber,
                     SequenceNumber = sequenceNumber,
                     Type = (Type)command.Type,
-                    Value = command.Value,
+                    Value = command.Value.ToString(CultureInfo.InvariantCulture),
                 }
             };
 
@@ -549,7 +560,7 @@ namespace BankServer.Services
                     ClientSequenceNumber = command.ClientSequenceNumber,
                     SequenceNumber = sequenceNumber,
                     Type = (Type)command.Type,
-                    Value = command.Value,
+                    Value = command.Value.ToString(CultureInfo.InvariantCulture),
                 }
             };
 
@@ -590,7 +601,7 @@ namespace BankServer.Services
             List<Command> tentativeCommands = new List<Command>();
             foreach (var tentativeCommand in this.tentativeCommands)
             {
-                if (tentativeCommand.Value.ClientSequenceNumber > request.LastKnownSequenceNumber)
+                if (tentativeCommand.Value.SequenceNumber > request.LastKnownSequenceNumber)
                 {
                     tentativeCommands.Add(new Command
                     {
@@ -599,7 +610,7 @@ namespace BankServer.Services
                         ClientSequenceNumber = tentativeCommand.Value.ClientSequenceNumber,
                         SequenceNumber = tentativeCommand.Value.SequenceNumber,
                         Type = (Type)tentativeCommand.Value.Type,
-                        Value = tentativeCommand.Value.Value,
+                        Value = tentativeCommand.Value.Value.ToString(CultureInfo.InvariantCulture),
                     });
                 }
             }
@@ -687,7 +698,6 @@ namespace BankServer.Services
                 {
                     // Two commands are the same if they have the same clientId and clientSequenceNumber
                     if (!commands.Any(c => c.ClientId == command.ClientId && c.ClientSequenceNumber == command.ClientSequenceNumber))
-                        // transform command from grpc to ClientCommand (not sure if necessary)
                         commands.Add(new ClientCommand
                         (
                             command.Slot,
@@ -695,7 +705,7 @@ namespace BankServer.Services
                             command.ClientSequenceNumber,
                             command.SequenceNumber,
                             (CommandType)command.Type,
-                            command.Value
+                            decimal.Parse(command.Value, CultureInfo.InvariantCulture)
                         ));
                 }
             }

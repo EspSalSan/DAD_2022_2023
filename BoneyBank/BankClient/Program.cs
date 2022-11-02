@@ -21,10 +21,10 @@ namespace BankClient
                 Console.WriteLine("Invalid number of arguments.");
                 return;
             }
-            float value = float.Parse(commandArgs[1], CultureInfo.InvariantCulture);
-            if (value < 0)
+
+            if (decimal.Parse(commandArgs[1], CultureInfo.InvariantCulture) < 0)
             {
-                Console.WriteLine("Value must be a positive float.");
+                Console.WriteLine("Value must be non-negative.");
                 return;
             }
 
@@ -34,7 +34,7 @@ namespace BankClient
             { 
                 ClientId = processId,
                 ClientSequenceNumber = clientSequenceNumber,
-                Value = value,
+                Value = commandArgs[1],
             };
 
             // Send request to all bank processes
@@ -89,10 +89,9 @@ namespace BankClient
             {
                 Console.WriteLine("Invalid number of arguments");
             }
-            float value = float.Parse(commandArgs[1], CultureInfo.InvariantCulture);
-            if (value < 0)
+            if (decimal.Parse(commandArgs[1], CultureInfo.InvariantCulture) < 0)
             {
-                Console.WriteLine("Value must be a positive integer.");
+                Console.WriteLine("Value must be non-negative.");
                 return;
             }
 
@@ -101,7 +100,7 @@ namespace BankClient
             WithdrawRequest withdrawRequest = new WithdrawRequest {
                 ClientId = processId,
                 ClientSequenceNumber = clientSequenceNumber,
-                Value = value 
+                Value = commandArgs[1]
             };
 
             bool primaryReplied = false;
@@ -276,7 +275,6 @@ namespace BankClient
                         break;
 
                     case "R":
-                        // TODO: Devia ter um clientSequenceNumber unico e ainda nao tem, problemas com o Read do lado do banco
                         SendReadBalanceRequest(processId, clientSequenceNumber, commandArgs, bankHosts);
                         break;
 
@@ -289,7 +287,6 @@ namespace BankClient
                         break;
                 }
             }
-
             Console.ReadKey();
         }
     }

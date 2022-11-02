@@ -7,8 +7,8 @@ P 6 bank http://localhost:10009
 P 7 client script-1
 P 8 client script-2
 S 5
-T 17:52:00
-D 10
+T 20:28:00
+D 10000
 F 1 (1, N, NS) (2, N, NS) (3, N, NS) (4, F, S) (5, N, NS) (6, F, S)
 F 2 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, F, S) (6, N, NS)
 F 3 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS)

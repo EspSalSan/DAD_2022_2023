@@ -77,11 +77,11 @@ namespace BankServer
             server.Start();
 
             Console.WriteLine($"Bank Server ({processId}) listening on port {port}");
-            Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration}");
+            Console.WriteLine($"First slot starts at {startTime} with intervals of {slotDuration} ms");
             Console.WriteLine($"Working with {bankHosts.Count} banks and {boneyHosts.Count} boney processes");
 
             // Starts a new thread for each slot
-            SetSlotTimer(startTime, slotDuration * 1000, serverService);
+            SetSlotTimer(startTime, slotDuration, serverService);
 
             Console.WriteLine("Press any key to stop the server...");
             Console.ReadKey();

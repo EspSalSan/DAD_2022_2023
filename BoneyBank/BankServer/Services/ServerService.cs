@@ -254,12 +254,11 @@ namespace BankServer.Services
                     if (!process.Value && process.Key < primary && this.bankHosts.ContainsKey(process.Key))
                         primary = process.Key;
                 }
-            } 
-            
+            }
 
             if (primary == int.MaxValue)
             {
-                // TODO: Guardar ,como lider do slot N, o lider do slot N-1 ?
+                // Should never happen since if the process is running then it could be the primary
                 Console.WriteLine("No process is valid for leader election.");
                 Console.WriteLine("No progress is going to be made in this slot.");
                 return;
@@ -357,7 +356,6 @@ namespace BankServer.Services
                 decimal.Parse(request.Command.Value, CultureInfo.InvariantCulture)
             );
 
-            // TODO: Verify correctness
             // Add to tentative dictionary
             if (ack)
             {
@@ -402,9 +400,7 @@ namespace BankServer.Services
 
             Console.WriteLine($"({request.Command.Slot})        Commit(id={request.ProcessId},seq={request.Command.SequenceNumber},cId={request.Command.ClientId},cSeq={request.Command.ClientSequenceNumber})");
 
-            // Because commands are committed in order, count == sequence number - 1
-            // Wait for every commit before it
-            // IF THERE ARE NO HOLES (TODO: Verify if there is a possibility of holes)
+            // Wait for previous commits, assumes no holes in history
             while (this.committedCommands.Count < request.Command.SequenceNumber-1)
             {
                 Monitor.Wait(this);
@@ -655,9 +651,6 @@ namespace BankServer.Services
         {
             Console.WriteLine("Sending list pending requests");
 
-            // TODO: o currentSequenceNumber pode ser diferente do comando mais recente committed
-            // (pode ja ter enviado commits mas ainda nao ter recebido)
-            // qual devemos enviar ?
             ListPendingRequestsRequest request = new ListPendingRequestsRequest
             {
                 LastKnownSequenceNumber = this.currentSequenceNumber,

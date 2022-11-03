@@ -108,7 +108,7 @@ namespace Utilities
                 {
                     if (processStates == null)
                     {
-                        // TODO: invalid config, maybe throw an exception instead of ignoring
+                        // Config poorly formatted
                         continue;
                     }
 

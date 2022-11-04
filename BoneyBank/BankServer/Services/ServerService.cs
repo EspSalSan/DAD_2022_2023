@@ -304,9 +304,7 @@ namespace BankServer.Services
                 tasks.Add(t);
             }
 
-            // Wait for a majority of responses
-            for (int i = 0; i < this.boneyHosts.Count / 2 + 1; i++)
-                tasks.RemoveAt(Task.WaitAny(tasks.ToArray()));
+            Task.WaitAny(tasks.ToArray());
 
             return compareAndSwapReplyValue;
         }

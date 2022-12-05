@@ -99,9 +99,16 @@ namespace BankServer.Services
                 this.currentSlot++;
                 
                 Console.WriteLine($"Preparing slot {this.currentSlot}...");
-                
+                try
+                {
+                    DoCompareAndSwap(this.currentSlot);
+                } catch (Exception e)
+                {
+                    Console.WriteLine(e.StackTrace);
+                    Console.WriteLine("--------------------------------------------");
+                }
                 // Elect a primary process for the current slot
-                DoCompareAndSwap(this.currentSlot);
+                
 
                 // If leader changed, do cleanup
                 if (
@@ -111,7 +118,15 @@ namespace BankServer.Services
                     )
                 {
                     Console.WriteLine($"Leader changed from {this.primaryPerSlot[this.currentSlot - 1]} to {this.primaryPerSlot[this.currentSlot]}");
-                    DoCleanup(); 
+                    try
+                    {
+                        DoCleanup();
+                    } catch (Exception e)
+                    {
+                        Console.WriteLine(e.StackTrace);
+                        Console.WriteLine("--------------------------------------------");
+                    }
+                     
                 }
                 Console.WriteLine($"Preparation for slot {this.currentSlot} ended.");
             }
@@ -261,6 +276,8 @@ namespace BankServer.Services
                 // Should never happen since if the process is running then it could be the primary
                 Console.WriteLine("No process is valid for leader election.");
                 Console.WriteLine("No progress is going to be made in this slot.");
+                if (slot > 1)
+                    this.primaryPerSlot.Add(slot, this.primaryPerSlot[slot - 1]);
                 return;
             }
 
@@ -355,6 +372,7 @@ namespace BankServer.Services
             );
 
             // Add to tentative dictionary
+            // ack
             if (ack)
             {
                 // Command is new

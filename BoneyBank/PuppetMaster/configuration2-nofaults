@@ -1,0 +1,25 @@
+P 1 boney http://127.0.0.1:10001
+P 2 boney http://127.0.0.1:10002
+P 3 boney http://127.0.0.1:10003
+P 4 boney http://127.0.0.1:10004
+P 5 boney http://127.0.0.1:10005
+P 6 bank http://127.0.0.1:10006
+P 7 bank http://127.0.0.1:10007
+P 8 bank http://127.0.0.1:10008
+P 9 client bank_client_2_1
+P 10 client bank_client_2_2
+S 12
+T 12:10:15
+D 10000 
+F 1 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 2 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 3 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 4 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 5 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 6 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 7 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 8 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 9 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 10 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 11 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)
+F 12 (1, N, NS) (2, N, NS) (3, N, NS) (4, N, NS) (5, N, NS) (6, N, NS) (7, N, NS) (8, N, NS)

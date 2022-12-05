@@ -1,0 +1,153 @@
+
+%
+%  $Description: Author guidelines and sample document in LaTeX 2.09$ 
+%
+%  $Author: ienne $
+%  $Date: 1995/09/15 15:20:59 $
+%  $Revision: 1.4 $
+%
+
+\documentclass[times, 10pt,twocolumn]{article} 
+\usepackage{latex8}
+\usepackage{times}
+
+%\documentstyle[times,art10,twocolumn,latex8]{article}
+
+%------------------------------------------------------------------------- 
+% take the % away on next line to produce the final camera-ready version 
+\pagestyle{empty}
+
+%------------------------------------------------------------------------- 
+\begin{document}
+
+\title{
+BoneyBank: Fault-Tolerant Bank Application \\
+\large Group 8
+}
+
+\author{
+Diogo Santos\\diogosilvasantos@tecnico.ulisboa.pt\\95562\\
+\and
+Eduardo Espadeiro\\eduardo.espadeiro@tecnico.ulisboa.pt\\95568\\
+\and
+Guilherme Salvador\\guilherme.salvador@tecnico.ulisboa.pt\\95584\\
+}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+   This report describes BoneyBank, a fault-tolerant bank application system. BoneyBank allows multiple clients to perform deposits, withdraws and reads on a single bank account while keeping a consistent view of the data even with failures of individual processes. This is achieved by combining Paxos to provide high availability and Primary-Backup replication to ensure that data isn’t lost in the event of a failure.
+\end{abstract}
+
+%------------------------------------------------------------------------- 
+\Section{Introduction}
+
+BoneyBank is designed as a three-tier system, the first tier handles the communication between clients and bank servers, the second tier ensures the durability of the account information with primary-backup replication and the third tier is a distributed coordination system that the bank servers use to determine who is the primary server in the second tier.
+This report describes our decisions, assumptions and implementation when building this application.
+
+%------------------------------------------------------------------------- 
+\Section{Solution Structure}
+
+%------------------------------------------------------------------------- 
+\SubSection{Files}
+
+The project is organized inside a Visual Studio Solution named BoneyBank, composed of 5 projects, \textit{BankClient}, \textit{BankServer}, \textit{Boney}, \textit{PuppetMaster} and \textit{Utilities}.
+\begin{description}
+   \item[BankClient] contains \textit{Scripts} folder where the scripts with commands are stored.
+   \item[BankServer/Boney] contains a \textit{Services} folder where the services are implemented and a \textit{Domain} folder where domain entities are defined.
+   \item[PuppetMaster] contains the configuration file.
+   \item[Utilities] defines functions and structs for other projects to read the configuration file.
+\end{description}
+The solution also contains a \textit{Proto} folder that stores all protobuf definitions.
+
+%------------------------------------------------------------------------- 
+\SubSection{Configuration File}
+The configuration file is read using the \textit{ReadConfig} function inside the \textit{Utilities} project. This function returns a struct named \textit{BoneyBankConfig} which represents all relevant information about the state of each process and generic information such as slot duration and start time.
+
+All projects, except for \textit{PuppetMaster}, call this function when at the start to get the information on this file. \textit{PuppetMaster} requires more information, more specifically on the client processes, so it uses its own functions.
+
+%-------------------------------------------------------------------------
+\Section{Processes}
+
+%------------------------------------------------------------------------- 
+\SubSection{Process state}
+
+\textit{BankServer} and \textit{Boney} processes may be frozen. This state is simulated using both a while loop and a monitor, preventing processes from making any progress and avoiding busy waiting. We use the \textit{Monitor.Wait} function inside the while loop and we call the \textit{Monitor.PulseAll} function afterwards to notify all waiting threads when the state changes.
+
+%------------------------------------------------------------------------ 
+\SubSection{Perfect Channels}
+
+The communication between all processes assumes perfect channels. In our implementation, every message is sent through a gRPC channel and will eventually reach its destination and might be processed immediately or not depending on the current state of the destination process. In the event of a frozen process, the thread that received the message will wait until it's not frozen. Therefore no queue or re-transmission is necessary. Due to the multi-threaded nature of gRPC, we do not assume FIFO channels.
+
+%------------------------------------------------------------------------
+\Section{Time Slots}
+
+The application runs by slots of configurable intervals. Both \textit{BankServer} and \textit{Boney} start a new thread to run the \textit{PrepareSlot} function at the start and then every interval. 
+In \textit{BankServer} there is the concept of the current slot of a process and the concept of the total slots that actually occurred until a certain moment:
+\begin{itemize}
+  \item \textit{currentSlot} keeps the last experienced slot, meaning that if a process is frozen during a given slot, it does not experience it;
+  \item \textit{totalSlots} keeps the number of slots that have elapsed whether the slot was frozen or not.
+\end{itemize}
+ 
+These two variables are useful to keep a history of slots up to date. At the beginning of each slot, each \textit{BankServer} process runs a \textit{CompareAndSwap} function from the \textit{currentSlot} until the \textit{totalSlots} to ensure a continuous history of who the primary was for each slot.
+In \textit{Boney} the process ids are updated at the beginning of every slot to allow Paxos to make progress in situations where a process with a lower id must continue the work of a process with a higher id.
+Bank clients don’t have any knowledge about slots.
+
+%-------------------------------------------------------------------------
+\section{Leader Election}
+
+\textit{Boney} processes implement a distributed leader election system using Compare-And-Swap and Paxos.
+
+%------------------------------------------------------------------------ 
+\SubSection{Compare-And-Swap}
+
+At the beginning of each slot, every \textit{BankServer} process calls the \textit{CompareAndSwap} function to elect the leader for the current slot.
+When choosing the primary, first, each \textit{BankServer} process tries to elect the previous slot’s primary to prevent unnecessary changes but, if it is suspected, the lowest id of an unsuspected process will be proposed. It will then wait for the result of the \textit{Boney} consensus that will decide the primary for the slot.
+The Compare-And-Swap value can only be changed once per \textit{Boney} process per slot, meaning that once a \textit{BankServer} process proposes a value to that process, all subsequent requests to the same process will not affect the election.
+
+%------------------------------------------------------------------------ 
+\SubSection{Paxos}
+
+On the \textit{Boney} tier, it’s kept a Dictionary of \textit{SlotData}. This entity stores multiple values that are slot specific, for example, Paxos values (\textit{readTimestamp}, \textit{writeTimestamp}, etc) to allow multiple instances of Paxos to run simultaneously for different slots.
+
+When the first \textit{CompareAndSwap} request is received, the Boney process will check if it's the leader of Paxos and start a new instance. Following requests to this process must wait until the election is finished.
+
+Paxos starts by sending Prepare requests to all processes. Upon receiving a majority of replies, first verifies if there is a more recent leader, by comparing the \textit{readTimestamp} of all responses to his \textit{processId}. If there is, halt this Paxos instance and wait for the other leader to finish, otherwise it will iterate over all responses to find the proposed value with the most recent \textit{readTimestamp}, if none is found, use his own value.
+Then send Accept requests. When a process receives an Accept request it will verify if his \textit{readTimestamp} is equal to the sender’s process id to ensure that it only accepts writes from the last process that read him. If this is verified send Decide requests, when a process receives a  majority of Decide requests the final value is locked and every thread is notified that this Paxos instance has ended and it's safe to reply to all \textit{BankServers}.
+
+
+%-------------------------------------------------------------------------
+\section{ Replication }
+Bank processes implement a primary-backup replication system using a two-phase commit protocol.
+%------------------------------------------------------------------------ 
+\SubSection{Two-phase commit}
+Using the leader election algorithm previously described, a \textit{BankServer} process is elected as primary for each slot, all other processes are considered replicas.
+
+On receiving a client request, the process first verifies if it's the primary and then, if the command is from the current slot, starts the two-phase commit protocol while replicas wait for the command to be committed before replying to the client.
+
+The primary starts by sending Tentative requests to all processes and waits for a majority of replies. A request is acknowledged if it was sent from the primary process of that slot and if the primary hasn’t changed until the current slot. It then stores this command in a \textit{tentativeCommands} dictionary. If the primary process receives a majority of acknowledgements it sends a commit request to all processes with the final sequence number. Processes that receive this request must apply the command. To preserve a total order, each process only applies the command N if the previous command N-1 was already applied. This also means that there are no holes in the committed commands' history.
+If the leader changes after sending tentative requests, the algorithm is interrupted meaning that the old leader will not send commits even if it receives a majority of acknowledgements.
+
+The two-phase commit protocol is only used for deposits and withdrawals while reads can be immediately executed while keeping a consistent view of the data since clients execute commands sequentially meaning that a read will always execute after its previous command
+%------------------------------------------------------------------------ 
+\SubSection{Cleanup}
+
+At the beginning of the slot, if the primary process changes, it will run a cleanup algorithm to prevent data loss.
+
+It starts by sending a request with its highest sequence number and the remaining \textit{BankServer} processes will reply with their tentative requests that have a sequence number strictly higher than the primary's to prevent unnecessary commits. 
+The primary waits for a majority of replies and filters them using the \textit{clientId} and \textit{clientSequenceNumber} attributes to avoid duplicates and sorted firstly by increasing the sequence number and then by decreasing the slot number.
+This order attempts to give some “fairness” by proposing the commands in the same order as the previous leader.
+Finally, they are proposed using the two-phase commit protocol.
+
+During this algorithm, a \textit{isCleaning} flag is set to true to prevent the client’s requests from being processed in the middle of Cleanup which could lead to inconsistencies.
+%-------------------------------------------------------------------------
+
+\section{ Conclusion and Future Work }
+Paxos is an attractive approach for building fault-tolerant applications as it has a natural resilience to machine failures.
+
+In this paper, we described BoneyBank, a system that ensures consistency and high-fault tolerance with the use of Paxos and two-phase commit. However, it relies on a perfect failure detector simulated by the slot’s configuration file and the fact that only one bank server can process writes at each slot could lead to latency issues with higher loads of requests.
+
+As future work, we could build the same application using State Machine Replication (SMR) instead to compare performance and availability. On one hand, the Paxos protocol is more expensive than the two-phase commit protocol for propagating requests but, having no designated leader would increase availability and avoid expensive algorithms on leader change.
+
+\end{document}
